@@ -1,5 +1,10 @@
 module NTTs
 
-# Write your package code here.
+using BitIntegers
+using CUDA
+
+include("utils/utils.jl")
+include("cpuntt.jl")
+include("gpuntt.jl")
 
 end
