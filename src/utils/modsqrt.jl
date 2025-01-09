@@ -25,10 +25,10 @@ function modsqrt(a::T, p::T) where T<:Integer
         e += 1
     end
 
-    n = 2
+    n = T(2)
 
     while legendre_symbol(n, p) != -1
-        n += 1
+        n += T(1)
         if n > p
             throw("something messed up")
         end

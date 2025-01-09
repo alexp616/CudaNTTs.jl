@@ -19,9 +19,6 @@
 
 
 # 
-struct CPUNTTPlan
-    
-end
 
 function slow_ntt(vec, npru::T, p::T) where T<:Integer
     n = length(vec)
@@ -55,7 +52,7 @@ function slow_ntt(vec, npru::T, p::T) where T<:Integer
     return vec
 end
 
-function get_transposed_index(idx, rows, cols)
+function get_transposed_index(idx::T, rows::T, cols::T) where T<:Integer
     originalRow = idx % rows
     originalCol = idx ÷ rows
 
@@ -64,118 +61,134 @@ function get_transposed_index(idx, rows, cols)
     return result
 end
 
-function final_transpose(idx::Int32, fftLen, numsPerBlock, lastFFTLen)
-    bitlength = intlog2(fftLen)
-
+function final_transpose(idx::Integer, bitlength::Integer, numsPerBlock::Integer, lastFFTLen::Integer)
     firstswaplength = intlog2(lastFFTLen)
     unchangedbitslen = intlog2(numsPerBlock ÷ lastFFTLen)
     middlebitslen = bitlength - 2 * firstswaplength - unchangedbitslen
-    # println("swapLength: $firstswaplength")
-    # println("unchangedbitslen: $unchangedbitslen")
-    # println("middlebitslen: $middlebitslen")
 
-    lastBits = idx & Int32((1 << firstswaplength) - 1)
-    # println("lastBits: $(bitstring(lastBits))")
+    lastBits = idx & ((1 << firstswaplength) - 1)
     idx >>= firstswaplength
-    unchangedbits = idx & Int32((1 << unchangedbitslen) - 1)
-    # println("unchangedbits: $(bitstring(unchangedbits))")
+    unchangedbits = idx & ((1 << unchangedbitslen) - 1)
     idx >>= unchangedbitslen
-    middlebits = idx & Int32((1 << middlebitslen) - 1)
-    # println("middlebits: $(bitstring(middlebits))")
+    middlebits = idx & ((1 << middlebitslen) - 1)
     idx >>= middlebitslen
-    firstBits = idx & Int32((1 << firstswaplength) - 1)
-    # println("firstBits: $(bitstring(firstBits))")
+    firstBits = idx & ((1 << firstswaplength) - 1)
     
-    middlebits = digit_reverse(Int(middlebits), numsPerBlock, middlebitslen ÷ intlog2(numsPerBlock))
-    # println("middlebits after reversal: $(bitstring(middlebits))")
+    middlebits = digit_reverse(middlebits, numsPerBlock, middlebitslen ÷ intlog2(numsPerBlock))
     offset = firstswaplength
 
     result = firstBits
     result |= unchangedbits << offset
-    # println("1: $(bitstring(result))")
     offset += unchangedbitslen
     result |= middlebits << offset
-    # println("2: $(bitstring(result))")
     offset += middlebitslen
     result |= lastBits << offset
-    # println("result: $(bitstring(result))")
 
-    return result
+    return typeof(idx)(result)
 end
 
-# This way this works is:
-# We want to perform an FFT of a vector with a power of 2 length.
-# The simple radix-2 decimation in time algorithm will require an 
-# auxiliary array, since the bit-reversal permutations need to be applied
-# in order for the FFT to be done in-place.
-# 
-# The solution is to break the FFT into chunks bigger than 2, say
-# R (for radix). We also have R be a power of 2.
-# 
-# Say R is 2^6, and our FFT is of length 2^20. We can convert this to a
-# 2^6 x 2^6 x 2^6 x 2^2 FFT, with the additional step of applying 3 sets of
-# twiddle factors.
-# 
-# What's so important about this is that 2^6 is a size small enough to fit
-# into shared memory of a GPU thread block. This means that when we want to
-# apply our bit reversal, we can just use shared memory as our auxiliary space.
-# with the added benefit of removing the global memory access of the FFT.
-# 
-# Now comes the question of how to determine R, the optimal radix.
-# The solution I use is to make R the # of numbers that are handled by each block.
-# If one block does an entire FFT, this removes the need of inter-block syncing.
-# 
-# So how many numbers are handled by each block? This is decided by maximizing how many
-# total threads we can run per SM. The bottleneck here is shared memory size.
+# Defining a new implementation
+# To define a new FFT implementation in your own module, you should
 
-# 3-dimensional doesn't work, 1-dimensional doesn't work
-function ntt(vec::Vector{T}, npru::T, p::T) where T<:Integer
-    n = length(vec)
+# Define a new subtype (e.g. MyPlan) of AbstractFFTs.Plan{T} for FFTs and related transforms on arrays of T. This must have a pinv::Plan field, initially undefined when a MyPlan is created, that is used for caching the inverse plan.
+
+# Define a new method AbstractFFTs.plan_fft(x, region; kws...) that returns a MyPlan for at least some types of x and some set of dimensions region. The region (or a copy thereof) should be accessible via fftdims(p::MyPlan) (which defaults to p.region), and the input size size(x) should be accessible via size(p::MyPlan).
+
+# Define a method of LinearAlgebra.mul!(y, p::MyPlan, x) that computes the transform p of x and stores the result in y.
+
+# Define a method of *(p::MyPlan, x), which can simply call your mul! method. This is not defined generically in this package due to subtleties that arise for in-place and real-input FFTs.
+
+# If the inverse transform is implemented, you should also define plan_inv(p::MyPlan), which should construct the inverse plan to p, and plan_bfft(x, region; kws...) for an unnormalized inverse ("backwards") transform of x. Implementations only need to provide the unnormalized backwards FFT, similar to FFTW, and we do the scaling generically to get the inverse FFT.
+
+# You can also define similar methods of plan_rfft and plan_brfft for real-input FFTs.
+
+# To support adjoints in a new plan, define the trait AbstractFFTs.AdjointStyle. AbstractFFTs implements the following adjoint styles: AbstractFFTs.FFTAdjointStyle, AbstractFFTs.RFFTAdjointStyle, AbstractFFTs.IRFFTAdjointStyle, and AbstractFFTs.UnitaryAdjointStyle. To define a new adjoint style, define the methods AbstractFFTs.adjoint_mul and AbstractFFTs.output_size.
+
+# multidimensional
+
+struct CPUNTTPlan{T}
+    n::Int
+    p::T
+    npru::T
+    numsPerThread::Int
+    threadsPerBlock::Int
+    numsPerBlock::Int
+    numBlocks::Int
+    numIterations::Int
+    lastFFTLen::Int
+    npbpruPowerTable::Array{T}
+end
+
+function plan_cpuntt(n::Int, p::T, npru::T; numsPerThread = 2, threadsPerBlock = 1) where T<:Integer
     @assert ispow2(n)
+
+    numsPerBlock = numsPerThread * threadsPerBlock
+    numBlocks = n ÷ numsPerBlock
+    numIterations = Int(ceil(log(numsPerBlock, n)))
+    lastFFTLen = n ÷ numsPerBlock ^ (numIterations - 1)
+    npbpruPowerTable = generate_twiddle_factors(powermod(npru, n ÷ numsPerBlock, p), p, numsPerBlock)
+
+    return CPUNTTPlan{T}(
+        n,
+        p,
+        npru,
+        numsPerThread,
+        threadsPerBlock,
+        numsPerBlock,
+        numBlocks,
+        numIterations,
+        lastFFTLen,
+        npbpruPowerTable
+    )
+end
+
+function ntt(vec::Vector{T}, p::T, npru::T) where T<:Integer
+    @assert ispow2(length(vec))
+    plan = plan_ntt(length, p, npru)
+
+    return ntt(vec, plan)
+end
+
+function ntt(vec::Vector{T}, plan::CPUNTTPlan{T}) where T<:Integer
+    @assert length(vec) == plan.n
+
+    n = plan.n
+    p = plan.p
+    npru = plan.npru
+    numsPerThread = plan.numsPerThread
+    threadsPerBlock = plan.threadsPerBlock
+    numsPerBlock = plan.numsPerBlock
+    numBlocks = plan.numBlocks
+    numIterations = plan.numIterations
+    lastFFTLen = plan.lastFFTLen
+    npbpruPowerTable = plan.npbpruPowerTable
     log2n = intlog2(n)
 
     original = vec
     aux = zeros(T, n)
 
-    numsPerThread = 4
-    threadsPerBlock = 2
-    numsPerBlock = numsPerThread * threadsPerBlock
-
-    log2numsPerBlock = intlog2(numsPerBlock)
-
-    numBlocks = n ÷ numsPerBlock
-
-    npbpruPowerTable = generate_twiddle_factors(powermod(npru, n ÷ numsPerBlock, p), p, numsPerBlock)
-
     shared = zeros(T, numsPerBlock)
-    numIterations = Int(ceil(log(numsPerBlock, n)))
-
-    lastFFTLen = n ÷ numsPerBlock ^ (numIterations - 1)
 
     twiddleStride = 1
     for _ in 1:numIterations - 1
-    # for itr in 1:numIterations
         fftLen = numsPerBlock
-
         log2fftLen = intlog2(fftLen)
 
         threadStride = numBlocks
         for blockIdx in 1:numBlocks
             for threadIdx in 1:threadsPerBlock
-                # Load numbers into shared memory
                 fftIdx = threadIdx - 1
-                globalIdx = blockIdx + (threadIdx - 1) * threadStride
-                added = threadStride * threadsPerBlock
+                globalIdx = blockIdx + fftIdx * threadStride
+                globalIdxStride = threadStride * threadsPerBlock
                 for _ in 1:numsPerThread
                     val = vec[globalIdx]
-                    # println("blockIdx: $blockIdx, globalIdx: $globalIdx")
                     bitreversed = bit_reverse(fftIdx, log2fftLen)
                     shared[bitreversed + 1] = val
                     fftIdx += threadsPerBlock
-                    globalIdx += added
+                    globalIdx += globalIdxStride
                 end
             end
-            # display("before FFT: blockIdx: $blockIdx, shared: $shared")
+
             for i in 1:log2fftLen
                 m = 1 << i
                 m2 = m >> 1
@@ -189,8 +202,6 @@ function ntt(vec::Vector{T}, npru::T, p::T) where T<:Integer
                         gh_j = j + threadStart
                         idx1 = m * (gh_j & mask) + (gh_j >> bits)
                         idx2 = idx1 + m2
-                        # theta = twiddleFactors[(n >> i) * (gh_j >> bits) + 1]
-                        # println("gh_j: $gh_j, idx1: $idx1, idx2: $idx2, power: $((fftLen >> i) * (gh_j >> bits))")
                         theta = npbpruPowerTable[((fftLen >> i) * (gh_j >> bits)) + 1]
                         t = mul_mod(theta, shared[idx2 + 1], p)
                         u = shared[idx1 + 1]
@@ -199,30 +210,21 @@ function ntt(vec::Vector{T}, npru::T, p::T) where T<:Integer
                         shared[idx2 + 1] = sub_mod(u, t, p)
                     end
                 end
-                # println()
             end
             
             blockTwiddleStride = ((blockIdx - 1) ÷ twiddleStride) * twiddleStride
             for threadIdx in 1:threadsPerBlock
-                # Load numbers into shared memory
                 fftIdx = threadIdx - 1
                 globalIdx = fftIdx + (blockIdx - 1) * numsPerBlock
                 for _ in 1:numsPerThread
-                    # println("blockIdx: $blockIdx, globalIdx: $globalIdx, resultIdx: $resultIdx")
-                    # shared[fftIdx + 1] = mul_mod(shared[fftIdx + 1], twiddleFactors[(blockIdx - 1) * fftIdx + 1], p)
                     shared[fftIdx + 1] = mul_mod(shared[fftIdx + 1], powermod(npru, fftIdx * blockTwiddleStride, p), p)
                     aux[globalIdx + 1] = shared[fftIdx + 1]
                     globalIdx += threadsPerBlock
                     fftIdx += threadsPerBlock
                 end
             end
-            # display("after twiddle: blockIdx: $blockIdx, shared: $shared")
         end
 
-        # display("after iteration: $aux")
-        # println()
-        # println()
-        # throw("skibidi")
         temp = aux
         aux = vec
         vec = temp
@@ -233,31 +235,28 @@ function ntt(vec::Vector{T}, npru::T, p::T) where T<:Integer
     for _ in 1:1
         fftLen = lastFFTLen
         log2fftLen = intlog2(fftLen)
+        fftsPerBlock = numsPerBlock ÷ lastFFTLen
 
         threadStride = numBlocks
         for blockIdx in 1:numBlocks
-            fill!(shared, 0)
             for threadIdx in 1:threadsPerBlock
-                # Load numbers into shared memory
                 virtualThreadIdx = threadIdx - 1
-                globalIdx = blockIdx + (threadIdx - 1) * threadStride
+                globalIdx = blockIdx + virtualThreadIdx * threadStride
                 added = threadStride * threadsPerBlock
                 for _ in 1:numsPerThread
-                    # transposedIdx = get_transposed_index(virtualThreadIdx, lastFFTLen, numsPerBlock ÷ lastFFTLen)
-                    transposedIdx = get_transposed_index(virtualThreadIdx, numsPerBlock ÷ lastFFTLen, lastFFTLen)
+                    transposedIdx = get_transposed_index(virtualThreadIdx, fftsPerBlock, lastFFTLen)
                     fftNum = transposedIdx ÷ fftLen
                     val = vec[globalIdx]
 
                     fftIdx = transposedIdx % fftLen
                     bitreversed = bit_reverse(fftIdx, log2fftLen)
-                    # bitreversed = fftIdx
-                    # println("virtualThreadIdx: $virtualThreadIdx, original fftIdx: $(virtualThreadIdx % fftLen), fftNum: $fftNum, transposed fftIdx: $(fftIdx), bitreversed: $bitreversed, val: $val, shared idx: $(fftNum + bitreversed)")
+                    
                     shared[fftNum * fftLen + bitreversed + 1] = val
                     virtualThreadIdx += threadsPerBlock
                     globalIdx += added
                 end
             end
-            # display("before FFT: blockIdx: $blockIdx, shared: $shared")
+
             for i in 1:log2fftLen
                 m = 1 << i
                 m2 = m >> 1
@@ -272,8 +271,7 @@ function ntt(vec::Vector{T}, npru::T, p::T) where T<:Integer
                         fftNum = virtualThreadIdx ÷ (fftLen >> 1)
                         idx1 = m * (gh_j & mask) + (gh_j >> bits) + (fftLen * fftNum)
                         idx2 = idx1 + m2
-                        # println("blockIdx: $blockIdx, virtualThreadIdx: $virtualThreadIdx, idx1: $idx1, idx2: $idx2, gh_j: $gh_j, power: $((numsPerBlock >> i) * (numsPerBlock ÷ fftLen) * (gh_j >> bits))")
-                        theta = npbpruPowerTable[((fftLen >> i) * (numsPerBlock ÷ fftLen) * (gh_j >> bits)) + 1]
+                        theta = npbpruPowerTable[((fftLen >> i) * (fftsPerBlock) * (gh_j >> bits)) + 1]
                         t = mul_mod(theta, shared[idx2 + 1], p)
                         u = shared[idx1 + 1]
 
@@ -283,33 +281,18 @@ function ntt(vec::Vector{T}, npru::T, p::T) where T<:Integer
                         offset += threadsPerBlock
                     end
                 end
-                # println()
             end
 
             for threadIdx in 1:threadsPerBlock
                 fftIdx = threadIdx - 1
                 globalIdx = fftIdx + (blockIdx - 1) * numsPerBlock
                 for _ in 1:numsPerThread
-                    aux[final_transpose(Int32(globalIdx), n, numsPerBlock, lastFFTLen) + 1] = shared[fftIdx + 1]
+                    aux[final_transpose(Int32(globalIdx), log2n, Int32(numsPerBlock), Int32(lastFFTLen)) + 1] = shared[fftIdx + 1]
                     globalIdx += threadsPerBlock
                     fftIdx += threadsPerBlock
                 end
             end
-
-            # debug version that just sends shared memory to where it maps to
-            # for threadIdx in 1:threadsPerBlock
-            #     fftIdx = threadIdx - 1
-            #     globalIdx = fftIdx + (blockIdx - 1) * numsPerBlock
-            #     for _ in 1:numsPerThread
-            #         aux[globalIdx + 1] = shared[fftIdx + 1]
-            #         globalIdx += threadsPerBlock
-            #         fftIdx += threadsPerBlock
-            #     end
-            # end
         end
-
-        # display("after iteration: $aux")
-        # println()
     end
 
     if pointer(aux) != pointer(original)

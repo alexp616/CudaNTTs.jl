@@ -82,3 +82,18 @@ end
 function mul_mod(x::BigInt, y::BigInt, m::BigInt)
     return (x * y) % m
 end
+
+function power_mod(n::T, p::Integer, m::T) where T<:Integer
+    result = eltype(n)(1)
+    base = unchecked_mod(n, m)
+
+    while p > 0
+        if p & 1 == 1
+            result = mul_mod(result, base, m)
+        end
+        base = mul_mod(base, base, m)
+        p = p >> 1
+    end
+
+    return result
+end

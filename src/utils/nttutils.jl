@@ -6,6 +6,10 @@ function intlog2(x::Int64)
     return 64 - leading_zeros(x - 1)
 end
 
+function intlog2(x::Int32)
+    return 32 - leading_zeros(x - Int32(1))
+end
+
 function find_next_2a3b(n::Int)
     lowest = Base._nextpow2(n)
     lowpow2 = intlog2(lowest)
@@ -36,43 +40,34 @@ function find_next_2a3b(n::Int)
     return lowest, lowpow2, lowpow3
 end
 
-function is_primitive_root(n::T, p::T, order::Int) where T<:Integer
-    temp = n
+function is_primitive_root(npru::T, p::T, order::Integer) where T<:Integer
+    temp = npru
     for i in 1:order - 1
         if temp == 1
             return false
         end
 
-        temp = mul_mod(temp, n, p)
+        temp = mul_mod(temp, npru, p)
     end
 
     return temp == 1
 end
 
 function primitive_nth_root_of_unity(n::Int, p::Integer)
+    @assert ispow2(n)
     if (p - 1) % n != 0
         throw("n must divide p - 1")
     end
-    temp, a, b = find_next_2a3b(n)
-    if temp != n
-        throw("This method only works for $n that can be written as 2^a*3^b")
-    end
-    
-    if a > 0
-        g = p - 1 # p - 1 always a 2nd root of unity
-        a -= 1
-    else
-        g = 1
-    end
 
-    while a > 0
+    g = p - typeof(p)(1)
+
+    a = intlog2(n)
+
+    while a > 1
         a -= 1
+        original = g
         g = modsqrt(g, p)
-    end
-
-    while b > 0
-        b -= 1
-        g = modcubert(g, p)
+        @assert powermod(g, 2, p) == original
     end
 
     @assert is_primitive_root(g, p, n)
@@ -112,20 +107,20 @@ function find_ntt_primes(len::Int, T = UInt32, num = 10)
     return prime_list
 end
 
-function bit_reverse(x::Int, log2n::Int)
-    temp = 0
+function bit_reverse(x::Integer, log2n::Integer)
+    temp = zero(typeof(x))
     for i in 1:log2n
-        temp <<= 1
-        temp |= (x & 1)
-        x >>= 1
+        temp <<= typeof(x)(1)
+        temp |= (x & typeof(x)(1))
+        x >>= typeof(x)(1)
     end
     return temp
 end
 
-function digit_reverse(x::Int, base::Int, logn)
+function digit_reverse(x::Integer, base::Integer, logn::Integer)
     temp = 0
 
-    for i in 1:logn
+    for _ in 1:logn
         x, b = divrem(x, base)
         temp = temp * base + b
     end
