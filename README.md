@@ -4,6 +4,10 @@
 
 A package for computing number-theoretic transforms using [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl)
 
+This implementation isn't quite state-of-the-art. As of now (Jan 2025), this implementation seems to be state-of-the-art.
+
+This package exists because I came up with my own implementation of the Cooley-Tukey algorithm that I hadn't seen anywhere else, so I decided to implement it.
+
 ## Usage
 To start, install and import the package:
 
