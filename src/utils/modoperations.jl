@@ -32,7 +32,7 @@ function sub_mod(x::Signed, y::Signed, m::Signed)
     return mod(x - y, m)
 end
 
-function add_mod(x::Unsigned, y::Unsigned, m::Unsigned)
+function add_mod(x::T, y::T, m::T)::T where T<:Unsigned
     result = x + y
     return (result >= m || result < x) ? result - m : result
 end
