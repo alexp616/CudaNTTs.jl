@@ -1,5 +1,6 @@
 include("modoperations.jl")
 include("modsqrt.jl")
+include("barrett.jl")
 
 function intlog2(x::Int64)
     return 64 - leading_zeros(x - 1)
@@ -69,7 +70,7 @@ end
 
 function find_ntt_primes(len::Int, T = UInt32, num = 10)
     prime_list = []
-    k = fld(typemax(T), len)
+    k = fld(typemax(T) >> 1, len)
     while length(prime_list) < num
         candidate = k * len + 1
         if isprime(candidate)
@@ -79,6 +80,20 @@ function find_ntt_primes(len::Int, T = UInt32, num = 10)
     end
 
     return prime_list
+end
+
+function find_ntt_prime(len::Int, T::DataType)
+    k = fld(typemax(T) >> 1, len)
+    while true
+        candidate = T(k * len + 1)
+        if isprime(candidate)
+            return candidate
+        end
+        k -= 1
+        if k <= 0
+            throw("No NTT prime found")
+        end
+    end
 end
 
 function bit_reverse(x::T, log2n::T)::T where T<:Integer
