@@ -9,6 +9,7 @@ Stores all things needed to perform a NTT on a vector. Generated using
 struct NTTPlan{T}
     n::Int32
     p::T
+    reducer::BarrettReducer{T}
     npru::T
     threadsPerBlock::Int32
     numsPerBlock::Int32
@@ -30,6 +31,7 @@ using `plan_ntt()`
 struct INTTPlan{T}
     n::Int32
     p::T
+    reducer::BarrettReducer{T}
     npru::T
     lenInverse::T
     threadsPerBlock::Int32
@@ -56,16 +58,16 @@ has to be a power of 2.
 - `npru`: A primitive n-th root of unity of 𝔽ₚ. The function `primitive_nth_root_of_unity()` 
 provides a way to compute one quickly.
 """
-function plan_ntt(n::Integer, p::T, npru::T) where T<:Integer
+function plan_ntt(n::Integer, p::T, npru::T) where T<:Unsigned
     @assert ispow2(n)
     @assert isprime(p)
     @assert is_primitive_root(npru, p, n)
 
     temp = CUDA.zeros(T, 1)
-
-    kernel1 = @cuda launch=false ntt_kernel1!(temp, p, npru, temp, temp, Int32(0), Int32(0))
-    kernel2 = @cuda launch=false ntt_kernel2!(temp, p, temp, temp, Int32(0), Int32(0))
-    invkernel2 = @cuda launch=false ntt_kernel3!(temp, p, temp, temp, p, Int32(0), Int32(0))
+    reducer = BarrettReducer(p)
+    kernel1 = @cuda launch=false ntt_kernel1!(temp, reducer, npru, temp, temp, Int32(0), Int32(0))
+    kernel2 = @cuda launch=false ntt_kernel2!(temp, reducer, temp, temp, Int32(0), Int32(0))
+    invkernel2 = @cuda launch=false ntt_kernel3!(temp, reducer, temp, temp, p, Int32(0), Int32(0))
 
     threadsPerBlock = min(n ÷ 2, Base._prevpow2(launch_configuration(invkernel2.fun).threads))
     numsPerBlock = 2 * threadsPerBlock
@@ -78,6 +80,7 @@ function plan_ntt(n::Integer, p::T, npru::T) where T<:Integer
     nttPlan = NTTPlan{T}(
         Int32(n),
         p,
+        reducer,
         npru,
         Int32(threadsPerBlock),
         Int32(numsPerBlock),
@@ -96,6 +99,7 @@ function plan_ntt(n::Integer, p::T, npru::T) where T<:Integer
     inttPlan = INTTPlan{T}(
         Int32(n),
         p,
+        reducer,
         npruinv,
         T(invmod(n, p)),
         Int32(threadsPerBlock),
@@ -128,7 +132,7 @@ function ntt!(vec::CuVector{T}, plan::NTTPlan{T}) where T<:Integer
 
     for _ in 1:plan.numIterations - 1
         plan.kernel1(
-            vec, plan.p, plan.npru, aux, plan.npbpruPowerTable, plan.numsPerBlock, twiddleStride;
+            vec, plan.reducer, plan.npru, aux, plan.npbpruPowerTable, plan.numsPerBlock, twiddleStride;
             threads = plan.threadsPerBlock,
             blocks = plan.numBlocks,
             shmem = plan.shmemSize
@@ -142,7 +146,7 @@ function ntt!(vec::CuVector{T}, plan::NTTPlan{T}) where T<:Integer
     end
 
     plan.kernel2(
-        vec, plan.p, aux, plan.npbpruPowerTable, plan.numsPerBlock, plan.lastFFTLen;
+        vec, plan.reducer, aux, plan.npbpruPowerTable, plan.numsPerBlock, plan.lastFFTLen;
         threads = plan.threadsPerBlock,
         blocks = plan.numBlocks,
         shmem = plan.shmemSize
@@ -173,7 +177,7 @@ function intt!(vec::CuVector{T}, plan::INTTPlan{T}) where T<:Integer
 
     for _ in 1:plan.numIterations - 1
         plan.kernel1(
-            vec, plan.p, plan.npru, aux, plan.npbpruPowerTable, plan.numsPerBlock, twiddleStride;
+            vec, plan.reducer, plan.npru, aux, plan.npbpruPowerTable, plan.numsPerBlock, twiddleStride;
             threads = plan.threadsPerBlock,
             blocks = plan.numBlocks,
             shmem = plan.shmemSize
@@ -187,7 +191,7 @@ function intt!(vec::CuVector{T}, plan::INTTPlan{T}) where T<:Integer
     end
 
     plan.kernel2(
-        vec, plan.p, aux, plan.npbpruPowerTable, plan.lenInverse, plan.numsPerBlock, plan.lastFFTLen;
+        vec, plan.reducer, aux, plan.npbpruPowerTable, plan.lenInverse, plan.numsPerBlock, plan.lastFFTLen;
         threads = plan.threadsPerBlock,
         blocks = plan.numBlocks,
         shmem = plan.shmemSize
@@ -202,7 +206,7 @@ function intt!(vec::CuVector{T}, plan::INTTPlan{T}) where T<:Integer
     return nothing
 end
 
-function ntt_kernel1!(vec::CuDeviceVector{T}, p::T, npru::T, aux::CuDeviceVector{T}, npbpruPowerTable::CuDeviceVector{T}, numsPerBlock::Int32, twiddleStride::Int32) where T<:Integer
+function ntt_kernel1!(vec::CuDeviceVector{T}, p::Reducer{T}, npru::T, aux::CuDeviceVector{T}, npbpruPowerTable::CuDeviceVector{T}, numsPerBlock::Int32, twiddleStride::Int32) where T<:Integer
     @inbounds begin
     log2FFTLen = intlog2(numsPerBlock)
     
@@ -276,7 +280,7 @@ function ntt_kernel1!(vec::CuDeviceVector{T}, p::T, npru::T, aux::CuDeviceVector
     return nothing
 end
 
-function ntt_kernel2!(vec::CuDeviceVector{T}, p::T, aux::CuDeviceVector{T}, npbpruPowerTable::CuDeviceVector{T}, numsPerBlock::Int32, fftLen::Int32) where T<:Integer
+function ntt_kernel2!(vec::CuDeviceVector{T}, p::Reducer{T}, aux::CuDeviceVector{T}, npbpruPowerTable::CuDeviceVector{T}, numsPerBlock::Int32, fftLen::Int32) where T<:Integer
     @inbounds begin
 
     shared = CuDynamicSharedArray(T, numsPerBlock)
@@ -353,7 +357,7 @@ function ntt_kernel2!(vec::CuDeviceVector{T}, p::T, aux::CuDeviceVector{T}, npbp
 end
 
 # Exact same as ntt_kernel2!, except multiplies everything by lenInverse at the end.
-function ntt_kernel3!(vec::CuDeviceVector{T}, p::T, aux::CuDeviceVector{T}, npbpruPowerTable::CuDeviceVector{T}, lenInverse::T, numsPerBlock::Int32, fftLen::Int32) where T<:Integer
+function ntt_kernel3!(vec::CuDeviceVector{T}, p::Reducer{T}, aux::CuDeviceVector{T}, npbpruPowerTable::CuDeviceVector{T}, lenInverse::T, numsPerBlock::Int32, fftLen::Int32) where T<:Integer
     @inbounds begin
 
     shared = CuDynamicSharedArray(T, numsPerBlock)
