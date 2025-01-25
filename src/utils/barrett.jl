@@ -1,14 +1,14 @@
 abstract type Reducer{T<:Unsigned} end
 
-struct BarrettReducer{T<:Unsigned} <: Reducer{T}
+struct BarrettReducer{T<:Unsigned} <: Reducer
     p::T
     k::Int
     μ::T
 
     function BarrettReducer(p::T) where T<:Unsigned
-        @assert p <= typemax(T) >> 1
-        k = Int32(ceil(log2(p)))
-        μ = T(fld(BigInt(1) << (2*k), p))
+        @assert p < typemax(T) >> 2
+        k = Int(ceil(log2(p)))
+        μ = T(fld(BigInt(1) << (2*k + 1), p))
         return new{T}(p, k, μ)
     end
 end
@@ -33,9 +33,11 @@ function mul_mod(a::T, b::T, reducer::BarrettReducer{T}) where T<:Unsigned
     μ = reducer.μ
     k = reducer.k
 
-    r = (C >> (k - 1)) * μ
-    r >>= (k + 1)
-    Cout = C - r * p
+    r = (C >> (k - 2))
+    r *= μ
+    r >>= (k + 3)
+    r *= p
+    Cout = C - r
     Cout = Cout >= p ? Cout - p : Cout
     return T(Cout)
 end
