@@ -1,6 +1,6 @@
 abstract type Reducer{T<:Unsigned} end
 
-struct BarrettReducer{T<:Unsigned} <: Reducer
+struct BarrettReducer{T<:Unsigned} <: Reducer{T}
     p::T
     k::Int
     μ::T
