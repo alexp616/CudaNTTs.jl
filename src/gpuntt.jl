@@ -60,7 +60,7 @@ provides a way to compute one quickly.
 """
 function plan_ntt(n::Integer, p::T, npru::T) where T<:Unsigned
     @assert ispow2(n) "n: $n"
-    @assert isprime(p) "p: $p"
+    # @assert isprime(p) "p: $p"
     @assert is_primitive_root(npru, p, n)
 
     temp = CUDA.zeros(T, 1)
