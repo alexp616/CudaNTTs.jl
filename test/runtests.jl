@@ -22,7 +22,7 @@ function test_correct()
         @test cpuarr == Array(gpuarr)
     end
 
-    p = UInt64(0x7ffffffff9000001)
+    p = UInt64(0x3ffffffffa000001)
     for log2len in 1:4:21
         len = 1 << log2len
         npru = primitive_nth_root_of_unity(len, p)
