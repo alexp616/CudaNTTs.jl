@@ -11,6 +11,8 @@ function intlog2(x::Int32)::Int32
 end
 
 function is_primitive_root(npru::T, p::T, order::Integer) where T<:Integer
+    npru = BigInt(npru)
+    p = BigInt(p)
     temp = npru
     for i in 1:order - 1
         if temp == 1
