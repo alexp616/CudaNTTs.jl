@@ -95,7 +95,7 @@ function plan_ntt(n::Integer, p::T, npru::T; check = true) where T<:Unsigned
         kernel2
     )
 
-    npruinv = invmod(npru, p)
+    npruinv = invmod(npru, BigInt(p))
     invnpbpruPowerTable = CuArray(generate_twiddle_factors(powermod(npruinv, n ÷ numsPerBlock, p), p, numsPerBlock))
 
     inttPlan = INTTPlan{T}(
@@ -103,7 +103,7 @@ function plan_ntt(n::Integer, p::T, npru::T; check = true) where T<:Unsigned
         p,
         reducer,
         npruinv,
-        T(invmod(n, p)),
+        T(invmod(n, BigInt(p))),
         Int32(threadsPerBlock),
         Int32(numsPerBlock),
         Int32(numBlocks),
