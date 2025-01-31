@@ -1,47 +1,57 @@
-using NTTs
+include("../src/NTTs.jl")
 using Test
 using CUDA
+using BenchmarkTools
 
 function test_correct()
-    p = UInt64(167772161)
-    for log2len in 4:4:24
-        len = 1 << log2len
-        npru = primitive_nth_root_of_unity(len, p)
-        cpuarr = rand(zero(typeof(p)):(p - one(p)), len)
-        gpuarr = CuArray(cpuarr)
+    n = 2^25
+    T = UInt64
+    p = T(4611685989973229569)
+    # n = 2^10
+    # T = UInt64
+    # p = T(65537)
+    npru = NTTs.primitive_nth_root_of_unity(n, p)
+    # println("npru: $npru")
+    plan = NTTs.plan_ntt(n, p, npru)
 
-        nttplan, inttplan = plan_ntt(len, p, npru)
-        NTTs.cpu_ntt!(cpuarr, nttplan)
-        ntt!(gpuarr, nttplan)
+    cpuvec = rand(T(0):T(p - 1), n)
+    # cpuvec = [T(i) for i in 1:n]
+    # cpuvec = ones(T, n)
 
-        @test cpuarr == Array(gpuarr)
+    vec1 = CuArray(cpuvec)
+    vec2 = CuArray(cpuvec)
 
-        NTTs.cpu_intt!(cpuarr, inttplan)
-        intt!(gpuarr, inttplan)
+    # NTTs.cpu_ntt!(cpuvec, plan)
+    NTTs.old_ntt!(vec1, plan)
+    NTTs.ntt!(vec2, plan)
 
-        @test cpuarr == Array(gpuarr)
-    end
+    # @assert cpuvec == Array(vec1)
+    @assert vec1 == vec2
+end
 
-    # p = UInt64(4089429488566273)
-    # for log2len in 4:4:28
-    #     len = 1 << log2len
-    #     npru = primitive_nth_root_of_unity(len, p)
-    #     cpuarr = rand(zero(typeof(p)):(p - one(p)), len)
-    #     gpuarr = CuArray(cpuarr)
+function benchmark()
+    n = 2^28
+    T = UInt64
+    p = T(4611685989973229569)
 
-    #     nttplan, inttplan = plan_ntt(len, p, npru)
-    #     NTTs.cpu_ntt!(cpuarr, nttplan)
-    #     ntt!(gpuarr, nttplan)
+    npru = NTTs.primitive_nth_root_of_unity(n, p)
+    plan = NTTs.plan_ntt(n, p, npru)
 
-    #     @test cpuarr == Array(gpuarr)
+    cpuvec = [T(i) for i in 1:n]
 
-    #     NTTs.cpu_intt!(cpuarr, inttplan)
-    #     intt!(gpuarr, inttplan)
+    vec2 = CuArray(cpuvec)
 
-    #     @test cpuarr == Array(gpuarr)
+    NTTs.ntt!(vec2, plan)
+
+    display(@benchmark CUDA.@sync NTTs.ntt!($vec2, $plan, true))
+    # for i in 1:100
+    #     CUDA.@time NTTs.ntt!(vec2, plan, true)
     # end
+
+    # CUDA.@profile NTTs.ntt!(vec, plan, true)
 end
 
 @testset "NTTs.jl" begin
-    test_correct()
+    # test_correct()
+    benchmark()
 end

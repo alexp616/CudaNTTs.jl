@@ -11,10 +11,11 @@ using Primes
 # export ntt!
 # export intt!
 
-include("utils/utils.jl")
 include("reducers.jl")
+include("utils/utils.jl")
 include("nttkernels.jl")
 include("gpuntt.jl")
+include("oldgpuntt.jl")
 include("cpuntt.jl")
 
 end

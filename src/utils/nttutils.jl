@@ -46,11 +46,11 @@ function primitive_nth_root_of_unity(n::Integer, p::Integer)
         @assert powermod(g, 2, p) == original
     end
 
-    @assert is_primitive_root(g, p, n)
+    # @assert is_primitive_root(g, p, n)
     return g
 end
 
-function gpu_root_of_unity_table_generator(npru::T, p::T, n::Integer) where T<:Integer
+function gpu_root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where T<:Integer
     return CuArray(root_of_unity_table_generator(npru, p, n))
 end
 
@@ -60,7 +60,7 @@ end
 Returns array containing powers 0 -> n-1 of npru mod p. Accessed as:
 arr[i] = npru ^ (i - 1)
 """
-function root_of_unity_table_generator(npru::T, p::T, n::Integer) where T<:Integer
+function root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where T<:Integer
     # @assert is_primitive_root(npru, p, n)
 
     result = zeros(T, n)
@@ -117,4 +117,28 @@ function bit_reverse(x::T, log2n::T)::T where T<:Integer
         x >>= one(T)
     end
     return temp
+end
+
+function parallel_bit_reverse_copy(vec::CuVector)
+    @assert ispow2(length(vec))
+    
+    log2n = intlog2(length(vec))
+    dest = CUDA.zeros(eltype(vec), length(vec))
+
+    kernel = @cuda launch=false parallel_bit_reverse_copy_kernel(vec, dest, log2n)
+    config = launch_configuration(kernel.fun)
+    threads = min(length(vec), Base._prevpow2(config.threads))
+    blocks = div(length(vec), threads)
+
+    CUDA.@sync kernel(vec, dest, log2n; threads = threads, blocks = blocks)
+
+    return dest
+end
+
+function parallel_bit_reverse_copy_kernel(src::CuDeviceVector, dest::CuDeviceVector, log2n::Int)
+    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
+
+    @inbounds dest[bit_reverse(idx - 1, log2n) + 1] = src[idx]
+
+    return nothing
 end

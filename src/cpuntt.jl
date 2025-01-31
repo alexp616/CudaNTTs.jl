@@ -12,13 +12,14 @@ function bit_reverse_vector(src::Vector{T}) where T<:Integer
     src .= aux
 end
 
-function cpu_ntt!(vec::Vector{T}, plan::NTTPlan{T}) where T<:Integer
+function cpu_ntt!(vec::Vector{T}, plan::NTTPlan{T}, bitreversedoutput = false) where T<:Integer
     @assert length(vec) == plan.n
-    bit_reverse_vector(vec)
 
-    log2n = intlog2(plan.n)
+    if !bitreversedoutput
+        bit_reverse_vector(vec)
+    end
 
-    for s in 1:log2n
+    for s in 1:plan.log2len
         m = 1 << s
         m2 = m >> 1
         ωₘ = powermod(plan.npru, plan.n ÷ m, plan.p)
@@ -32,6 +33,7 @@ function cpu_ntt!(vec::Vector{T}, plan::NTTPlan{T}) where T<:Integer
                 ω = mul_mod(ω, ωₘ, plan.p)
             end
         end
+        # println("vec after iteration $s: $vec \n")
     end
 
     return nothing
