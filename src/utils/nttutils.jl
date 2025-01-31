@@ -1,6 +1,5 @@
 include("modoperations.jl")
 include("modsqrt.jl")
-include("barrett.jl")
 
 function intlog2(x::Int64)
     return 64 - leading_zeros(x - 1)
@@ -51,14 +50,18 @@ function primitive_nth_root_of_unity(n::Integer, p::Integer)
     return g
 end
 
+function gpu_root_of_unity_table_generator(npru::T, p::T, n::Integer) where T<:Integer
+    return CuArray(root_of_unity_table_generator(npru, p, n))
+end
+
 """
-    generate_twiddle_factors(npru::T, p::T, n::Int) where T<:Integer
+    root_of_unity_table_generator(npru::T, p::T, n::Integer) where T<:Integer
 
 Returns array containing powers 0 -> n-1 of npru mod p. Accessed as:
 arr[i] = npru ^ (i - 1)
 """
-function generate_twiddle_factors(npru::T, p::T, n::Int) where T<:Integer
-    @assert is_primitive_root(npru, p, n)
+function root_of_unity_table_generator(npru::T, p::T, n::Integer) where T<:Integer
+    # @assert is_primitive_root(npru, p, n)
 
     result = zeros(T, n)
     curr = T(1)
@@ -67,10 +70,13 @@ function generate_twiddle_factors(npru::T, p::T, n::Int) where T<:Integer
         curr = mul_mod(curr, npru, p)
     end
 
+    bit_reverse_vector(result)
+
     return result
 end
 
 function find_ntt_primes(len::Int, T = UInt32, num = 10)
+    len *= 2
     prime_list = []
     k = fld(typemax(T) >> 2, len)
     while length(prime_list) < num
@@ -79,12 +85,17 @@ function find_ntt_primes(len::Int, T = UInt32, num = 10)
             push!(prime_list, candidate)
         end
         k -= 1
+
+        if k < 0
+            throw("Not enough primes found. Primes found: $(prime_list)")
+        end
     end
 
     return prime_list
 end
 
 function find_ntt_prime(len::Int, T::DataType)
+    len *= 2
     k = fld(typemax(T) >> 2, len)
     while true
         candidate = T(k * len + 1)
@@ -106,50 +117,4 @@ function bit_reverse(x::T, log2n::T)::T where T<:Integer
         x >>= one(T)
     end
     return temp
-end
-
-function digit_reverse(x::Integer, base::Integer, logn::Integer)
-    temp = 0
-
-    for _ in 1:logn
-        x, b = divrem(x, base)
-        temp = temp * base + b
-    end
-    
-    return temp
-end
-
-function get_transposed_index(idx::T, rows::T, cols::T) where T<:Integer
-    originalRow = idx % rows
-    originalCol = idx ÷ rows
-
-    result = originalCol + originalRow * cols
-
-    return result
-end
-
-function final_transpose(idx::Integer, bitlength::Integer, numsPerBlock::Integer, lastFFTLen::Integer)
-    firstswaplength = intlog2(lastFFTLen)
-    unchangedbitslen = intlog2(numsPerBlock ÷ lastFFTLen)
-    middlebitslen = bitlength - 2 * firstswaplength - unchangedbitslen
-
-    lastBits = idx & ((1 << firstswaplength) - 1)
-    idx >>= firstswaplength
-    unchangedbits = idx & ((1 << unchangedbitslen) - 1)
-    idx >>= unchangedbitslen
-    middlebits = idx & ((1 << middlebitslen) - 1)
-    idx >>= middlebitslen
-    firstBits = idx & ((1 << firstswaplength) - 1)
-    
-    middlebits = digit_reverse(middlebits, numsPerBlock, middlebitslen ÷ intlog2(numsPerBlock))
-    offset = firstswaplength
-
-    result = firstBits
-    result |= unchangedbits << offset
-    offset += unchangedbitslen
-    result |= middlebits << offset
-    offset += middlebitslen
-    result |= lastBits << offset
-
-    return typeof(idx)(result)
 end

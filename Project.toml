@@ -4,11 +4,13 @@ authors = ["Alex Pan"]
 version = "1.0.0"
 
 [deps]
+AbstractFFTs = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 BitIntegers = "c3b6d118-76ef-56ca-8cc7-ebb389d030a1"
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 Primes = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
 
 [compat]
+AbstractFFTs = "1.5.0"
 BitIntegers = "0.3.2"
 CUDA = "5.5.2"
 Primes = "0.5.6"
