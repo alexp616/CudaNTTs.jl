@@ -1,56 +1,76 @@
 include("../src/NTTs.jl")
 using Test
 using CUDA
-using BenchmarkTools
 
-function test_correct()
+function test_old_ntt()
+    for pow in 1:11
+        n = 2 ^ pow
+        T = UInt64
+        p = T(65537)
 
-    for pow in 12:25
+        npru = NTTs.primitive_nth_root_of_unity(n, p)
+        nttplan, inttplan = NTTs.plan_ntt(n, p, npru)
+
+        cpuvec = rand(T(0):T(p - 1), n)
+        cuvec = CuArray(cpuvec)
+
+        NTTs.cpu_ntt!(cpuvec, nttplan, false)
+        NTTs.old_ntt!(cuvec, nttplan, false)
+        
+        @test cpuvec == Array(cuvec)
+
+        NTTs.cpu_intt!(cpuvec, inttplan, false)
+        NTTs.old_intt!(cuvec, inttplan, false)
+
+        @test cpuvec == Array(cuvec)
+    end
+end
+
+function test_ntt()
+    for pow in 12:28
         n = 2 ^ pow
         T = UInt64
         p = T(4611685989973229569)
 
         npru = NTTs.primitive_nth_root_of_unity(n, p)
-        nttplan, inttplan = NTTs.plan_ntt(n, p, npru; memorysafe = true)
+        nttplan, _ = NTTs.plan_ntt(n, p, npru)
 
         cpuvec = rand(T(0):T(p - 1), n)
-
 
         vec1 = CuArray(cpuvec)
         vec2 = CuArray(cpuvec)
 
-        # NTTs.cpu_ntt!(cpuvec, plan)
-        NTTs.old_ntt!(vec1, nttplan)
-        NTTs.ntt!(vec2, nttplan)
+        NTTs.old_ntt!(vec1, nttplan, true)
+        NTTs.ntt!(vec2, nttplan, true)
 
-        # @assert cpuvec == Array(vec1)
         @test vec1 == vec2
     end
 end
 
-function benchmark()
-    n = 2^20
-    T = UInt64
-    p = T(4611685989973229569)
+function test_intt()
+    for pow in 12:28
+        n = 2 ^ pow
+        T = UInt64
+        p = T(4611685989973229569)
 
-    npru = NTTs.primitive_nth_root_of_unity(n, p)
-    nttplan, inttplan = NTTs.plan_ntt(n, p, npru)
+        npru = NTTs.primitive_nth_root_of_unity(n, p)
+        _, inttplan = NTTs.plan_ntt(n, p, npru)
 
-    cpuvec = [T(i) for i in 1:n]
+        cpuvec = rand(T(0):T(p - 1), n)
 
-    vec2 = CuArray(cpuvec)
+        vec1 = CuArray(cpuvec)
+        vec2 = CuArray(cpuvec)
 
-    NTTs.ntt!(vec2, nttplan, inttplan)
+        NTTs.old_intt!(vec1, inttplan, true)
+        NTTs.intt!(vec2, inttplan, true)
 
-    display(@benchmark CUDA.@sync NTTs.ntt!($vec2, $nttplan, inttplan, true))
-    # for i in 1:100
-    #     CUDA.@time NTTs.ntt!(vec2, plan, true)
-    # end
-
-    # CUDA.@profile NTTs.ntt!(vec, plan, true)
+        @test vec1 == vec2
+    end
 end
 
+
 @testset "NTTs.jl" begin
-    test_correct()
-    # benchmark()
+    # test_old_ntt()
+    test_ntt()
+    test_intt()
 end

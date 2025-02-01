@@ -135,7 +135,9 @@ struct INTTPlan{T<:Unsigned}
         log2n = intlog2(n)
 
         npruinv = T(invmod(BigInt(npru), BigInt(p)))
+        @assert BigInt(npruinv) * BigInt(npru) % p == 1 # because I don't trust invmod
         n_inverse = T(invmod(BigInt(n), BigInt(p)))
+        @assert BigInt(n) * BigInt(n_inverse) % p == 1
 
         reducer = BarrettReducer(p)
         if memorysafe
@@ -227,10 +229,11 @@ struct INTTPlan{T<:Unsigned}
                 compiledKernels = map(params -> compile_kernel(params, n_inverse, log2n, reducer), cfgs)
             else
                 compiledKernels = Function[]
-                for i in 1:length(cfgs) - 1
+
+                push!(compiledKernels, compile_kernel(cfgs[1], n_inverse, log2n, reducer, false))
+                for i in 2:length(cfgs)
                     push!(compiledKernels, compile_kernel(cfgs[i], n_inverse, log2n, reducer))
                 end
-                push!(compiledKernels, compile_kernel(cfgs[end], n_inverse, log2n, reducer, false))
             end
 
             return new{T}(n, p, reducer, npruinv, n_inverse, log2n, rootOfUnityTable, compiledKernels)
@@ -327,6 +330,26 @@ function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) whe
     return nothing
 end
 
-function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput = false)
-    
+function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:Integer
+    @assert intlog2(length(vec)) == plan.log2len
+
+    if plan.log2len < 12
+        return old_intt!(vec, plan, bitreversedinput)
+    end
+
+    if !bitreversedinput
+        correct = parallel_bit_reverse_copy(vec)
+        vec .= correct
+    end
+
+    if plan.rootOfUnityTable isa Vector{T}
+        curoutable = CuArray(plan.rootOfUnityTable)
+        for kernel in plan.compiledKernels
+            kernel(vec, vec, curoutable)
+        end
+    else
+        for kernel in plan.compiledKernels
+            kernel(vec, vec, plan.rootOfUnityTable)
+        end
+    end
 end

@@ -12,10 +12,12 @@ end
 
 @inline function GSUnit(U::Ref{T}, V::Ref{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
     u_ = U[]
-    v_ = mul_mod(V[], root, m)
+    v_ = V[]
 
     U[] = add_mod(u_, v_, m)
-    V[] = sub_mod(u_, v_, m)
+
+    v_ = sub_mod(u_, v_, m)
+    V[] = mul_mod(v_, root, m)
 
     return nothing
 end
