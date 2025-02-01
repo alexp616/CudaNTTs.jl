@@ -4,10 +4,8 @@
 
 A package for computing number-theoretic transforms using [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl)
 
-This implementation isn't quite state-of-the-art. As of now (Jan 2025), [this](https://github.com/Alisah-Ozcan/GPU-NTT) implementation seems to be state-of-the-art.
-
-This package exists because I came up with my own implementation of the Cooley-Tukey algorithm that utilizes some CUDA 
-principles that I hadn't seen anywhere else, so I decided to implement it.
+This implementation is ported to Julia from [this](https://github.com/Alisah-Ozcan/GPU-NTT) implementation.
+All credit goes to the authors of that repo.
 
 ## Usage
 To start, install and import the package:
@@ -55,24 +53,6 @@ and both `ntt!()` and `intt!()` change the entries of the
 input vector without returning anything.
 
 ## Future Work
+In the future, I may make the package work under AbstractFFTs, but
+for my current use case, I just have this.
 
-Down the road, I can think of things to improve this implementation:
-
-- Optimize code to use less instructions and registers (obviously)
-- Try out Plantard, Montgomery, and Barrett reduction
-- Precompute twiddle factors (my implementation only uses ~$2n$) 
-space, but to catch up with state-of-the-art, I think I need to
-sacrifice some memory efficiency. I can also give the user an 
-option to save memory at the cost of time.
-- Metaprogramming kernels and partial loop unrolling to reduce 
-register count, and improve speed
-
-At the end of the day, beating state-of-the-art FFT isn't exactly the 
-easiest thing to do in the world.
-
-I won't publish this package in this state, I think that the NTTs.jl
-name belongs to a higher-quality package.
-
-What I may try to do is translate the state-of-the-art implementation 
-into CUDA.jl, then I think that package would be deserving of the NTTs.jl 
-name.
