@@ -8,7 +8,7 @@ function generate_theta_m(p::T, len, log2len, npru::T) where T<:Integer
     return result
 end
 
-function old_ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) where T<:Unsigned
+function old_ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:Unsigned
     if !bitreversedoutput
         correct = parallel_bit_reverse_copy(vec)
         vec .= correct
@@ -33,9 +33,13 @@ function old_ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false)
         # println("vec after iteration $i: $vec \n")
     end
 
-    
-
     return nothing
+end
+
+function old_intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversed) where T<:Unsigned
+    if !bitreversedinput
+        correct = parallel_bit_reverse_copy()
+    end
 end
 
 function old_ntt_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, theta_m::T, magicmask::Int, magicbits::Int, m::Int, m2::Int) where T<:Unsigned

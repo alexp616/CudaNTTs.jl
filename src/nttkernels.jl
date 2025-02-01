@@ -202,7 +202,7 @@ end
 
 function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     inverse_root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, k::Int32, 
-    outer_iteration_count::Int32, N_power::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
+    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
 
     @inbounds begin
     idx_x = threadIdx().x - o
@@ -211,11 +211,11 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     block_y = blockIdx().y - o
     block_z = blockIdx().z - o
 
-    shared_memory = CuDynamicSharedArray(T, 512)
+    shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
     offset = o << (N_power - k - o)
-    t_ = shared_index + 1 - outer_iteration_count
+    t_ = shared_index + o - outer_iteration_count
     m = o << logm
 
     global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
@@ -249,9 +249,10 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
         in_shared_address = ((shared_address >> t_) << t_) + shared_address
     end
     CUDA.sync_threads()
+
     if (last_kernel)
-        polynomial_out[global_address + o] = mul_mod(shared_memory[shared_address], n_inverse, modulus)
-        polynomial_out[global_address + offset + o] = mul_mod(shared_memory[shared_address + blockDim().x * blockDim().y], n_inverse, modulus)
+        polynomial_out[global_address + o] = mul_mod(shared_memory[shared_address + o], n_inverse, modulus)
+        polynomial_out[global_address + offset + o] = mul_mod(shared_memory[shared_address + (blockDim().x * blockDim().y) + o], n_inverse, modulus)
     else
         polynomial_out[global_address + o] = shared_memory[shared_address + o];
         polynomial_out[global_address + offset + o] = shared_memory[shared_address + (blockDim().x * blockDim().y) + o];
@@ -263,7 +264,7 @@ end
 
 function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     inverse_root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, k::Int32, 
-    outer_iteration_count::Int32, N_power::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
+    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
 
     @inbounds begin
     idx_x = threadIdx().x - o
@@ -272,7 +273,7 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     block_y = blockIdx().y - o
     block_z = blockIdx().z - o
 
-    shared_memory = CuDynamicSharedArray(T, 512)
+    shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
     offset = o << (N_power - k - o)
@@ -280,7 +281,7 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     m = o << logm
 
     global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
-                     (blockDim().x * block_x) + (Int32(2) * block_y * offset) + 
+                     (blockDim().x * block_y) + (Int32(2) * block_x * offset) + 
                      (block_z << N_power)
     
     omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
@@ -311,8 +312,8 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     end
     CUDA.sync_threads()
     if (last_kernel)
-        polynomial_out[global_address + o] = mul_mod(shared_memory[shared_address], n_inverse, modulus)
-        polynomial_out[global_address + offset + o] = mul_mod(shared_memory[shared_address + blockDim().x * blockDim().y], n_inverse, modulus)
+        polynomial_out[global_address + o] = mul_mod(shared_memory[shared_address + o], n_inverse, modulus)
+        polynomial_out[global_address + offset + o] = mul_mod(shared_memory[shared_address + blockDim().x * blockDim().y + o], n_inverse, modulus)
     else
         polynomial_out[global_address + o] = shared_memory[shared_address + o];
         polynomial_out[global_address + offset + o] = shared_memory[shared_address + (blockDim().x * blockDim().y) + o];
