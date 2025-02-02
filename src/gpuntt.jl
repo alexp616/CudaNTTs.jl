@@ -314,8 +314,9 @@ function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) whe
     if plan.rootOfUnityTable isa Vector{T}
         curoutable = CuArray(plan.rootOfUnityTable)
         for kernel in plan.compiledKernels
-            kernel(vec, vec, curoutable)
+            CUDA.@sync kernel(vec, vec, curoutable)
         end
+        CUDA.unsafe_free!(curoutable)
     else
         for kernel in plan.compiledKernels
             kernel(vec, vec, plan.rootOfUnityTable)
@@ -345,8 +346,9 @@ function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = fal
     if plan.rootOfUnityTable isa Vector{T}
         curoutable = CuArray(plan.rootOfUnityTable)
         for kernel in plan.compiledKernels
-            kernel(vec, vec, curoutable)
+            CUDA.@sync kernel(vec, vec, curoutable)
         end
+        CUDA.unsafe_free!(curoutable)
     else
         for kernel in plan.compiledKernels
             kernel(vec, vec, plan.rootOfUnityTable)

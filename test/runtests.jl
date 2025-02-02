@@ -33,7 +33,8 @@ function test_ntt()
         p = T(4611685989973229569)
 
         npru = NTTs.primitive_nth_root_of_unity(n, p)
-        nttplan, _ = NTTs.plan_ntt(n, p, npru)
+        # nttplan, _ = NTTs.plan_ntt(n, p, npru)
+        nttplan, _ = NTTs.plan_ntt(n, p, npru; memorysafe = true)
 
         cpuvec = rand(T(0):T(p - 1), n)
 
@@ -54,7 +55,8 @@ function test_intt()
         p = T(4611685989973229569)
 
         npru = NTTs.primitive_nth_root_of_unity(n, p)
-        _, inttplan = NTTs.plan_ntt(n, p, npru)
+        # _, inttplan = NTTs.plan_ntt(n, p, npru)
+        _, inttplan = NTTs.plan_ntt(n, p, npru; memorysafe = true)
 
         cpuvec = rand(T(0):T(p - 1), n)
 
