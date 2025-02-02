@@ -70,15 +70,16 @@ function old_intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool =
         kernel(vec, plan.reducer, theta_m, magicmask, magicbits, m, m2; threads = threads, blocks = blocks)
     end
 
-    kernel2 = @cuda launch=false normalize_kernel!(vec, plan.reducer, plan.n_inverse)
-    kernel2(vec, plan.reducer, plan.n_inverse; threads = 2*threads, blocks = blocks)
+    kernel2 = @cuda launch=false normalize_kernel!(vec, plan.reducer, plan.n_inverse, length(vec) ÷ 2)
+    kernel2(vec, plan.reducer, plan.n_inverse, length(vec) ÷ 2; threads = threads, blocks = blocks)
 
     return nothing
 end
 
-function normalize_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, n_inverse::T) where T<:Unsigned
+function normalize_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, n_inverse::T, offset::Int) where T<:Unsigned
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     vec[idx] = mul_mod(vec[idx], n_inverse, modulus)
+    vec[idx + offset] = mul_mod(vec[idx + offset], n_inverse, modulus)
 
     return nothing
 end
