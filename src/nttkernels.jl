@@ -1,26 +1,30 @@
 global const o = Int32(1)
 
-@inline function CTUnit(U::Ref{T}, V::Ref{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
-    u_ = U[]
-    v_ = mul_mod(V[], root, m)
+@inline function CTUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
+    u_ = unsafe_load(U)
+    v_ = mul_mod(unsafe_load(V), root, m)
 
-    U[] = add_mod(u_, v_, m)
-    V[] = sub_mod(u_, v_, m)
+    unsafe_store!(U, add_mod(u_, v_, m))
+    unsafe_store!(V, sub_mod(u_, v_, m))
 
     return nothing
 end
 
-@inline function GSUnit(U::Ref{T}, V::Ref{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
-    u_ = U[]
-    v_ = V[]
+@inline function GSUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
+    u_ = unsafe_load(U)
+    v_ = unsafe_load(V)
 
-    U[] = add_mod(u_, v_, m)
+    unsafe_store!(U, add_mod(u_, v_, m))
 
     v_ = sub_mod(u_, v_, m)
-    V[] = mul_mod(v_, root, m)
+    unsafe_store!(V, mul_mod(v_, root, m))
 
     return nothing
 end
+
+# function small_ntt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, N_power::Int32)
+    
+# end
 
 function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, 
@@ -63,7 +67,7 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
         
             current_root_index = (omega_address >> t_2)
 
-            CTUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+            CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
             t = t >> 1
             t_2 -= o
@@ -79,7 +83,7 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
 
             current_root_index = (omega_address >> t_2)
 
-            CTUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+            CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
             t = t >> 1
             t_2 -= o
@@ -93,7 +97,7 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
         for _ in o:Int32(6)
             current_root_index = (omega_address >> t_2)
 
-            CTUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+            CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
             t = t >> 1
             t_2 -= o
@@ -153,7 +157,7 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
         
             current_root_index = (omega_address >> t_2)
 
-            CTUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+            CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
             t = t >> 1
             t_2 -= o
@@ -169,7 +173,7 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
 
             current_root_index = (omega_address >> t_2)
 
-            CTUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+            CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
             t = t >> 1
             t_2 -= o
@@ -183,8 +187,8 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
         for _ in o:Int32(6)
             current_root_index = (omega_address >> t_2)
 
-            CTUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
-
+            CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+            
             t = t >> 1
             t_2 -= o
             t_ -= o
@@ -241,7 +245,7 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
         
         current_root_index = (omega_address >> t_2)
 
-        GSUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
+        GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
 
         t = t << 1
         t_2 += o
@@ -303,7 +307,7 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
         
         current_root_index = (omega_address >> t_2)
 
-        GSUnit(Ref(shared_memory, in_shared_address + o), Ref(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
+        GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
 
         t = t << 1
         t_2 += o
