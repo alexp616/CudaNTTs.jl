@@ -27,7 +27,7 @@ function test_old_ntt()
 end
 
 function test_ntt()
-    for pow in 12:28
+    for pow in 2:28
         n = 2 ^ pow
         T = UInt64
         p = T(4611685989973229569)

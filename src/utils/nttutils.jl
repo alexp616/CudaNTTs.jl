@@ -9,6 +9,20 @@ function intlog2(x::Int32)::Int32
     return Int32(32) - leading_zeros(x - Int32(1))
 end
 
+function bit_reverse_vector(src::Vector{T}) where T<:Integer
+    @assert ispow2(length(src))
+    aux = zeros(T, length(src))
+
+    log2n = intlog2(length(src))
+    for i in eachindex(src)
+        val = src[i]
+        bitreversed = bit_reverse(i - 1, log2n)
+        aux[bitreversed + 1] = val
+    end
+
+    src .= aux
+end
+
 function is_primitive_root(npru::T, p::T, order::Integer) where T<:Integer
     npru = BigInt(npru)
     p = BigInt(p)

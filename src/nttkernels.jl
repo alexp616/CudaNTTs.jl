@@ -1,6 +1,6 @@
 global const o = Int32(1)
 
-@inline function CTUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
+@inline function CTUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:INTTYPES
     u_ = unsafe_load(U)
     v_ = mul_mod(unsafe_load(V), root, m)
 
@@ -10,7 +10,7 @@ global const o = Int32(1)
     return nothing
 end
 
-@inline function GSUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:Unsigned
+@inline function GSUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:INTTYPES
     u_ = unsafe_load(U)
     v_ = unsafe_load(V)
 
@@ -22,9 +22,40 @@ end
     return nothing
 end
 
-# function small_ntt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, N_power::Int32)
+function small_ntt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, N_power::Int32) where T<:INTTYPES
+
+    @inbounds begin
+    idx_x = threadIdx().x - o
     
-# end
+    shared_memory = CuDynamicSharedArray(T, length(polynomial_in))
+    shared_memory[threadIdx().x] = polynomial_in[threadIdx().x]
+    shared_memory[threadIdx().x + blockDim().x] = polynomial_in[threadIdx().x + blockDim().x]
+
+    t_ = N_power - o
+    t = blockDim().x
+
+    in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    current_root_index = zero(Int32)
+
+    for _ in o:N_power
+        CUDA.sync_threads()
+        current_root_index = idx_x >> t_
+
+        CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
+        # @cuprintln("idx $(in_shared_address + o): $(shared_memory[in_shared_address + o]), idx $(in_shared_address + t + o): $(shared_memory[in_shared_address + t + o]), root_of_unity_table[$(current_root_index + o)]: $(root_of_unity_table[current_root_index + o])")
+        t >>= 1
+        t_ -= o
+
+        in_shared_address = (((threadIdx().x - o) >> t_) << t_) + threadIdx().x - o
+    end
+    CUDA.sync_threads()
+
+    polynomial_out[threadIdx().x] = shared_memory[threadIdx().x]
+    polynomial_out[threadIdx().x + blockDim().x] = shared_memory[threadIdx().x + blockDim().x]
+    end
+
+    return
+end
 
 function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, 

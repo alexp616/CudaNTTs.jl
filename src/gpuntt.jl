@@ -1,6 +1,7 @@
 global const CC89 = string(capability(device())) == "8.9.0"
+global const INTTYPES = Union{UInt32, UInt64}
 
-struct NTTPlan{T<:Unsigned}
+struct NTTPlan{T<:INTTYPES}
     n::Int32
     p::T
     reducer::Reducer{T}
@@ -23,7 +24,12 @@ struct NTTPlan{T<:Unsigned}
         end
 
         if log2n <= 11
-            return new{T}(n, p, reducer, npru, log2n, rootOfUnityTable, Function[])
+            compiledKernels = Function[]
+            temp = CUDA.zeros(T, 1)
+            kernel = @cuda launch=false small_ntt_kernel!(temp, temp, temp, reducer, log2n)
+            func(in, out, rouTable) = kernel(in, out, rouTable, reducer, log2n; threads = n ÷ 2, blocks = 1, shmem = sizeof(T) * n)
+            push!(compiledKernels, func)
+            return new{T}(n, p, reducer, npru, log2n, rootOfUnityTable, compiledKernels)
         elseif log2n <= 28
             cfgs = KernelConfig[]
             if log2n == 12
@@ -118,7 +124,7 @@ struct NTTPlan{T<:Unsigned}
     end
 end
 
-struct INTTPlan{T<:Unsigned}
+struct INTTPlan{T<:INTTYPES}
     n::Int32
     p::T
     reducer::Reducer{T}
@@ -128,7 +134,7 @@ struct INTTPlan{T<:Unsigned}
     rootOfUnityTable::Union{CuVector{T}, Vector{T}}
     compiledKernels::Vector{Function}
 
-    function INTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:Unsigned
+    function INTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:INTTYPES
         @assert ispow2(n)
         @assert p % (2 * n) == 1
         n = Int32(n)
@@ -262,7 +268,7 @@ struct KernelConfig
     end
 end
 
-function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T}, standard::Bool = true) where T<:Unsigned
+function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T}, standard::Bool = true) where T<:INTTYPES
     temp = CUDA.zeros(T, 1)
     shmem_length = Int32(params.shared_memory ÷ sizeof(T))
 
@@ -281,7 +287,7 @@ function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T},
     return func
 end
 
-function compile_kernel(params::KernelConfig, n_inverse::T, log2n::Int32, modulus::Reducer{T}, standard::Bool = true) where T<:Unsigned
+function compile_kernel(params::KernelConfig, n_inverse::T, log2n::Int32, modulus::Reducer{T}, standard::Bool = true) where T<:INTTYPES
     temp = CUDA.zeros(T, 1)
     shmem_length = Int32(params.shared_memory ÷ sizeof(T))
 
@@ -304,12 +310,8 @@ function plan_ntt(n::Integer, p::T, npru::T; memorysafe = false) where T<:Intege
     return NTTPlan(n, p, npru; memorysafe = memorysafe), INTTPlan(n, p, npru; memorysafe = memorysafe)
 end
 
-function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) where T<:Unsigned
+function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) where T<:INTTYPES
     @assert intlog2(length(vec)) == plan.log2len
-
-    if plan.log2len < 12
-        return old_ntt!(vec, plan, bitreversedoutput)
-    end
 
     if plan.rootOfUnityTable isa Vector{T}
         curoutable = CuArray(plan.rootOfUnityTable)
@@ -331,7 +333,7 @@ function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) whe
     return nothing
 end
 
-function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:Integer
+function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:INTTYPES
     @assert intlog2(length(vec)) == plan.log2len
 
     if plan.log2len < 12
