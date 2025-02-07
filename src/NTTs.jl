@@ -1,6 +1,5 @@
 module NTTs
 
-using BitIntegers
 using CUDA
 using Primes
 
@@ -12,7 +11,7 @@ export ntt!
 export intt!
 
 include("reducers.jl")
-include("utils/utils.jl")
+include("utils/nttutils.jl")
 include("gpuntt.jl")
 include("nttkernels.jl")
 include("oldgpuntt.jl")

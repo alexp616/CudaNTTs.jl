@@ -6,29 +6,20 @@ function sub_mod(x::T, y::T, m::T) where T<:Unsigned
     end
 end
 
-function sub_mod(x::Signed, y::Signed, m::Signed)
-    return mod(x - y, m)
-end
-
 function add_mod(x::T, y::T, m::T)::T where T<:Unsigned
     result = x + y
     return (result >= m || result < x) ? result - m : result
 end
-
 
 function mywiden(x)
     throw(MethodError(mywiden, (typeof(x),)))
 end
 
 macro generate_widen()
-    int_types = [Int8, Int16, Int32, Int64, Int128, Int256, Int512]
-    uint_types = [UInt8, UInt16, UInt32, UInt64, UInt128, UInt256, UInt512]
+    uint_types = [UInt32, UInt64, UInt128]
 
     widen_methods = quote end
-    for i in 1:length(int_types) - 1
-        push!(widen_methods.args, :(
-            Base.@eval mywiden(x::$(int_types[i])) = $(int_types[i+1])(x)
-        ))
+    for i in 1:length(uint_types) - 1
         push!(widen_methods.args, :(
             Base.@eval mywiden(x::$(uint_types[i])) = $(uint_types[i+1])(x)
         ))
@@ -51,10 +42,6 @@ end
 
 function mul_mod(x::T, y::T, m::T) where T<:Integer
     return T(mod(mywidemul(x, y), m))
-end
-
-function mul_mod(x::BigInt, y::BigInt, m::BigInt)
-    return (x * y) % m
 end
 
 function power_mod(n::T, p::Integer, m::T) where T<:Integer

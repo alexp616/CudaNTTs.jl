@@ -13,10 +13,9 @@ struct BarrettReducer{T<:Unsigned} <: Reducer{T}
     end
 end
 
-@inline function add_mod(x::T, y::T, reducer::BarrettReducer{T})::T where T<:Unsigned
+@inline function add_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:Unsigned
     result = x + y
-    m = reducer.p
-    return (result >= m || result < x) ? result - m : result
+    return (result >= m.p || result < x) ? result - m.p : result
 end
 
 @inline function sub_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:Unsigned

@@ -10,7 +10,7 @@ struct NTTPlan{T<:INTTYPES}
     rootOfUnityTable::Union{CuVector{T}, Vector{T}}
     compiledKernels::Vector{Function}
 
-    function NTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:Integer
+    function NTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:Unsigned
         @assert ispow2(n)
         @assert p % (2 * n) == 1
         n = Int32(n)
@@ -153,7 +153,12 @@ struct INTTPlan{T<:INTTYPES}
         end
 
         if log2n <= 11
-            return new{T}(n, p, reducer, npruinv, n_inverse, log2n, rootOfUnityTable, Function[])
+            compiledKernels = Function[]
+            temp = CUDA.zeros(T, 1)
+            kernel = @cuda launch=false small_intt_kernel!(temp, temp, temp, reducer, log2n, n_inverse)
+            func(in, out, rouTable) = kernel(in, out, rouTable, reducer, log2n, n_inverse; threads = n ÷ 2, blocks = 1, shmem = sizeof(T) * n)
+            push!(compiledKernels, func)
+            return new{T}(n, p, reducer, npruinv, n_inverse, log2n, rootOfUnityTable, compiledKernels)
         elseif log2n <= 28
             cfgs = KernelConfig[]
             if log2n == 12
@@ -302,12 +307,15 @@ function compile_kernel(params::KernelConfig, n_inverse::T, log2n::Int32, modulu
     return func
 end
 
-function plan_ntt(n::Integer, p::T, npru::T; memorysafe = false) where T<:Integer
-    @assert ispow2(n) "n: $n"
-    @assert isprime(p) "p: $p"
-    # @assert is_primitive_root(npru, p, n)
+function plan_ntt(len::Integer, p::Integer, npru::Integer; memorysafe = false)
+    @assert ispow2(len) "len must be a power of 2."
+    @assert isprime(p) "p must be prime."
+    p = Unsigned(p)
+    @assert p < typemax(typeof(p)) >> 2 "p must be smaller than typemax(p) for Barrett reduction"
+    npru = typeof(p)(npru)
+    # @assert is_primitive_root(npru, p, n) this computation takes too long
 
-    return NTTPlan(n, p, npru; memorysafe = memorysafe), INTTPlan(n, p, npru; memorysafe = memorysafe)
+    return NTTPlan(len, p, npru; memorysafe = memorysafe), INTTPlan(len, p, npru; memorysafe = memorysafe)
 end
 
 function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) where T<:INTTYPES
@@ -335,10 +343,6 @@ end
 
 function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:INTTYPES
     @assert intlog2(length(vec)) == plan.log2len
-
-    if plan.log2len < 12
-        return old_intt!(vec, plan, bitreversedinput)
-    end
 
     if !bitreversedinput
         correct = parallel_bit_reverse_copy(vec)

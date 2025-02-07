@@ -3,15 +3,15 @@ function legendre_symbol(a::T, p::T) where T<:Integer
     if ls == p - 1 
         return -1
     else
-        return ls
+        return Signed(ls)
     end
 end
 
 function modsqrt(a::T, p::T) where T<:Integer
     if legendre_symbol(a, p) != 1
-        return 0
+        return T(0)
     elseif a == 0
-        return 0
+        return T(0)
     elseif p == 2
         return p
     elseif p % 4 == 3

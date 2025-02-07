@@ -27,7 +27,7 @@ function is_primitive_root(npru::T, p::T, order::Integer) where T<:Integer
     npru = BigInt(npru)
     p = BigInt(p)
     temp = npru
-    for i in 1:order - 1
+    for _ in 1:order - 1
         if temp == 1
             return false
         end
@@ -68,12 +68,6 @@ function gpu_root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) w
     return CuArray(root_of_unity_table_generator(npru, p, n))
 end
 
-"""
-    root_of_unity_table_generator(npru::T, p::T, n::Integer) where T<:Integer
-
-Returns array containing powers 0 -> n-1 of npru mod p. Accessed as:
-arr[i] = npru ^ (i - 1)
-"""
 function root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where T<:Integer
     # @assert is_primitive_root(npru, p, n)
 
@@ -86,6 +80,7 @@ function root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where
 
     bit_reverse_vector(result)
 
+    resize!(result, n ÷ 2)
     return result
 end
 

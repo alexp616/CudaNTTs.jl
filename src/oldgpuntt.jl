@@ -1,3 +1,6 @@
+# I came up with this implementation to learn about NTTs,
+# and it is remarkably slow, but it works.
+
 function generate_theta_m(p::T, len, log2len, npru::T) where T<:Integer
     result = zeros(T, log2len)
     for i in 1:log2len

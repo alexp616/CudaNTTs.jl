@@ -67,18 +67,15 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     idx_y = threadIdx().y - o
     block_x = blockIdx().x - o
     block_y = blockIdx().y - o
-    block_z = blockIdx().z - o
 
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
     offset = o << (N_power - logm - o)
     t_ = shared_index
-    m = o << logm
 
     global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
-                     (blockDim().x * block_x) + (Int32(2) * block_y * offset) + 
-                     (block_z << N_power)
+                     (blockDim().x * block_x) + (Int32(2) * block_y * offset)
 
     omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
                     (blockDim().x * block_x) + (block_y * offset)
@@ -103,7 +100,6 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
             t = t >> 1
             t_2 -= o
             t_ -= o
-            m <<= 1
 
             in_shared_address = ((shared_address >> t_) << t_) + shared_address
         end
@@ -119,7 +115,6 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
             t = t >> 1
             t_2 -= o
             t_ -= o
-            m <<= 1
 
             in_shared_address = ((shared_address >> t_) << t_) + shared_address
         end
@@ -133,7 +128,6 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
             t = t >> 1
             t_2 -= o
             t_ -= o
-            m <<= 1
 
             in_shared_address = ((shared_address >> t_) << t_) + shared_address
         end
@@ -157,18 +151,15 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     idx_y = threadIdx().y - o
     block_x = blockIdx().x - o
     block_y = blockIdx().y - o
-    block_z = blockIdx().z - o
 
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
     offset = o << (N_power - logm - o)
     t_ = shared_index
-    m = o << logm
 
     global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
-                     (blockDim().x * block_y) + (Int32(2) * block_x * offset) + 
-                     (block_z << N_power)
+                     (blockDim().x * block_y) + (Int32(2) * block_x * offset)
 
     omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
                     (blockDim().x * block_y) + (block_x * offset)
@@ -193,7 +184,6 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
             t = t >> 1
             t_2 -= o
             t_ -= o
-            m <<= 1
 
             in_shared_address = ((shared_address >> t_) << t_) + shared_address
         end
@@ -209,7 +199,6 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
             t = t >> 1
             t_2 -= o
             t_ -= o
-            m <<= 1
 
             in_shared_address = ((shared_address >> t_) << t_) + shared_address
         end
@@ -223,7 +212,6 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
             t = t >> 1
             t_2 -= o
             t_ -= o
-            m <<= 1
 
             in_shared_address = ((shared_address >> t_) << t_) + shared_address
         end
@@ -237,6 +225,43 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     return nothing
 end
 
+function small_intt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
+    inverse_root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, N_power::Int32, n_inverse::T) where T<:INTTYPES
+
+    idx_x = threadIdx().x - o
+
+    shared_memory = CuDynamicSharedArray(T, length(polynomial_in))
+
+    t_2 = Int32(0)
+    t_ = Int32(0)
+
+    shared_memory[threadIdx().x] = polynomial_in[threadIdx().x]
+    shared_memory[threadIdx().x + blockDim().x] = polynomial_in[threadIdx().x + blockDim().x]
+
+    t = o << t_
+    in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    current_root_index = zero(Int32)
+
+    for _ in o:N_power
+        CUDA.sync_threads()
+
+        current_root_index = idx_x >> t_2
+
+        GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
+
+        t = t << 1
+        t_2 += o
+        t_ += o
+
+        in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    end
+    CUDA.sync_threads()
+
+    polynomial_out[threadIdx().x] = mul_mod(shared_memory[threadIdx().x], n_inverse, modulus)
+    polynomial_out[threadIdx().x + blockDim().x] = mul_mod(shared_memory[threadIdx().x + blockDim().x], n_inverse, modulus)
+    return nothing
+end
+
 function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     inverse_root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, k::Int32, 
     outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
@@ -246,18 +271,15 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     idx_y = threadIdx().y - o
     block_x = blockIdx().x - o
     block_y = blockIdx().y - o
-    block_z = blockIdx().z - o
 
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
     offset = o << (N_power - k - o)
     t_ = shared_index + o - outer_iteration_count
-    m = o << logm
 
     global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
-                     (blockDim().x * block_x) + (Int32(2) * block_y * offset) + 
-                     (block_z << N_power)
+                     (blockDim().x * block_x) + (Int32(2) * block_y * offset)
     
     omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
                      (blockDim().x * block_x) + (block_y * offset)
@@ -281,7 +303,6 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
         t = t << 1
         t_2 += o
         t_ += o
-        m >>= 1
 
         in_shared_address = ((shared_address >> t_) << t_) + shared_address
     end
@@ -308,18 +329,15 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     idx_y = threadIdx().y - o
     block_x = blockIdx().x - o
     block_y = blockIdx().y - o
-    block_z = blockIdx().z - o
 
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
     offset = o << (N_power - k - o)
     t_ = shared_index + 1 - outer_iteration_count
-    m = o << logm
 
     global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
-                     (blockDim().x * block_y) + (Int32(2) * block_x * offset) + 
-                     (block_z << N_power)
+                     (blockDim().x * block_y) + (Int32(2) * block_x * offset)
     
     omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
                      (blockDim().x * block_y) + (block_x * offset)
@@ -343,7 +361,6 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
         t = t << 1
         t_2 += o
         t_ += o
-        m >>= 1
 
         in_shared_address = ((shared_address >> t_) << t_) + shared_address
     end
