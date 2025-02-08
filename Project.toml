@@ -1,4 +1,4 @@
-name = "NTTs"
+name = "CuNTTs"
 uuid = "355ed90f-8f14-42c1-a87f-2eca0abd88af"
 authors = ["Alex Pan"]
 version = "1.0.0"
