@@ -4,14 +4,15 @@
 
 A package for computing number-theoretic transforms using [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl)
 
-This implementation is ported to Julia from [this](https://github.com/Alisah-Ozcan/GPU-NTT) implementation.
-All credit for the NTT implementations for ring sizes $2^{12}$ through $2^{28}$ go to the author, Alisah-Ozcan.
+## Credits
+**This implementation is ported to Julia from [this](https://github.com/Alisah-Ozcan/GPU-NTT) implementation.
+All credit for the NTT implementations for ring sizes $2^{12}$ through $2^{28}$ go to the author, Alisah-Ozcan.**
 
 ## Usage
 To start, install and import the package:
 
 ```
-pkg> add https://github.com/alexp616/NTTs.jl
+pkg> add NTTs
 
 julia> using NTTs
 ```
@@ -61,4 +62,4 @@ to define their own modular reduction algorithms to pass in.
 - `UInt32` kernels are still faster, though not by a factor of 2. So, if a problem only requires `UInt32` precision, then it will be faster.
 - See documentation of `plan_ntt()` for the `memorysafe` option, which trades off speed for holding less GPU memory.
 - See documentation of `ntt!()` and `intt!()` for `bitreversedoutput` and `bitreversedinput`. If these are set to true, and the destination and source vector are the same, then the `NTT` and `INTT` are done in-place.
-- The usage I developed this for takes in inputs in $\mathbb{Z}_q[x]/(x^n - 1)$, so inputs in $\mathbb{Z}_q[x]/(x^n + 1)$ are not supported.
+- The usage I developed this for takes in inputs in $\mathbb{Z}_q[x]/(x^n - 1)$, so inputs in $\mathbb{Z}_q[x]/(x^n + 1)$ are not supported. If needed, this change isn't too difficult.
