@@ -1,6 +1,6 @@
-# GPUNTTs
+# CudaNTTs
 
-[![Build Status](https://github.com/alexp616/GPUNTTs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/alexp616/GPUNTTs.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/alexp616/CudaNTTs.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/alexp616/CudaNTTs.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 A package for computing number-theoretic transforms using [CUDA.jl](https://github.com/JuliaGPU/CUDA.jl)
 
@@ -12,9 +12,9 @@ All credit for the NTT implementations for ring sizes $2^{12}$ through $2^{28}$ 
 To start, install and import the package:
 
 ```
-pkg> add GPUNTTs
+pkg> add CudaNTTs
 
-julia> using GPUNTTs
+julia> using CudaNTTs
 ```
 
 Before doing anything, we need to generate an NTT plan. This step is needed

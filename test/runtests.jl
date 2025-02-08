@@ -1,5 +1,5 @@
-# include("../src/GPUNTTs.jl")
-using GPUNTTs
+# include("../src/CudaNTTs.jl")
+using CudaNTTs
 using Test
 using CUDA
 
@@ -9,16 +9,16 @@ function test_ntt()
         T = UInt64
         p = T(4611685989973229569)
 
-        npru = GPUNTTs.primitive_nth_root_of_unity(n, p)
-        nttplan, _ = GPUNTTs.plan_ntt(n, p, npru; memorysafe = false)
+        npru = CudaNTTs.primitive_nth_root_of_unity(n, p)
+        nttplan, _ = CudaNTTs.plan_ntt(n, p, npru; memorysafe = false)
 
         cpuvec = rand(T(0):T(p - 1), n)
 
         vec1 = CuArray(cpuvec)
         vec2 = CuArray(cpuvec)
 
-        GPUNTTs.old_ntt!(vec1, nttplan, true)
-        GPUNTTs.ntt!(vec2, nttplan, true)
+        CudaNTTs.old_ntt!(vec1, nttplan, true)
+        CudaNTTs.ntt!(vec2, nttplan, true)
 
         @test vec1 == vec2
     end
@@ -30,22 +30,22 @@ function test_intt()
         T = UInt64
         p = T(4611685989973229569)
 
-        npru = GPUNTTs.primitive_nth_root_of_unity(n, p)
-        _, inttplan = GPUNTTs.plan_ntt(n, p, npru; memorysafe = false)
+        npru = CudaNTTs.primitive_nth_root_of_unity(n, p)
+        _, inttplan = CudaNTTs.plan_ntt(n, p, npru; memorysafe = false)
 
         cpuvec = rand(T(0):T(p - 1), n)
 
         vec1 = CuArray(cpuvec)
         vec2 = CuArray(cpuvec)
 
-        GPUNTTs.old_intt!(vec1, inttplan, true)
-        GPUNTTs.intt!(vec2, inttplan, true)
+        CudaNTTs.old_intt!(vec1, inttplan, true)
+        CudaNTTs.intt!(vec2, inttplan, true)
 
         @test vec1 == vec2
     end
 end
 
-@testset "GPUNTTs.jl" begin
+@testset "CudaNTTs.jl" begin
     test_ntt()
     test_intt()
 end
