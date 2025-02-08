@@ -232,7 +232,6 @@ function small_intt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::Cu
 
     shared_memory = CuDynamicSharedArray(T, length(polynomial_in))
 
-    t_2 = Int32(0)
     t_ = Int32(0)
 
     shared_memory[threadIdx().x] = polynomial_in[threadIdx().x]
@@ -245,12 +244,11 @@ function small_intt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::Cu
     for _ in o:N_power
         CUDA.sync_threads()
 
-        current_root_index = idx_x >> t_2
+        current_root_index = idx_x >> t_
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
 
         t = t << 1
-        t_2 += o
         t_ += o
 
         in_shared_address = ((idx_x >> t_) << t_) + idx_x
