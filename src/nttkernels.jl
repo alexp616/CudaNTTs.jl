@@ -59,7 +59,7 @@ end
 
 function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, 
-    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, not_last_kernel::Bool)::Nothing where T<:Unsigned
+    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, not_last_kernel::Bool)::Nothing where T<:INTTYPES
 
     @inbounds begin
 
@@ -143,7 +143,7 @@ end
 
 function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, 
-    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, not_last_kernel::Bool)::Nothing where T<:Unsigned
+    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, not_last_kernel::Bool)::Nothing where T<:INTTYPES
 
     @inbounds begin
 
@@ -264,7 +264,7 @@ end
 
 function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     inverse_root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, k::Int32, 
-    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
+    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:INTTYPES
 
     @inbounds begin
     idx_x = threadIdx().x - o
@@ -322,7 +322,7 @@ end
 
 function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDeviceVector{T}, 
     inverse_root_of_unity_table::CuDeviceVector{T}, modulus::Reducer{T}, shared_index::Int32, logm::Int32, k::Int32, 
-    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:Unsigned
+    outer_iteration_count::Int32, N_power::Int32, shmem_length::Int32, n_inverse::T, last_kernel::Bool)::Nothing where T<:INTTYPES
 
     @inbounds begin
     idx_x = threadIdx().x - o

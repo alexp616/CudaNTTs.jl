@@ -10,6 +10,9 @@ export plan_ntt
 export ntt!
 export intt!
 
+global const CC89 = string(capability(device())) == "8.9.0"
+global const INTTYPES = Union{UInt32, UInt64, Int32, Int64}
+
 include("reducers.jl")
 include("utils/nttutils.jl")
 include("gpuntt.jl")

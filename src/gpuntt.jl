@@ -1,6 +1,10 @@
-global const CC89 = string(capability(device())) == "8.9.0"
-global const INTTYPES = Union{UInt32, UInt64}
+"""
+    struct NTTPlan{T<:Union{Int32, Int64, UInt32, UInt64}}
 
+Struct containing all information necessary to perform a NTT.
+Either construct directly through `NTTPlan(n, p, npru)`, or see
+`plan_ntt()`
+"""
 struct NTTPlan{T<:INTTYPES}
     n::Int32
     p::T
@@ -10,17 +14,17 @@ struct NTTPlan{T<:INTTYPES}
     rootOfUnityTable::Union{CuVector{T}, Vector{T}}
     compiledKernels::Vector{Function}
 
-    function NTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:Unsigned
+    function NTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:Integer
         @assert ispow2(n)
-        @assert p % (2 * n) == 1
+        @assert p % n == 1
         n = Int32(n)
         log2n = intlog2(n)
 
         reducer = BarrettReducer(p)
         if memorysafe
-            rootOfUnityTable = root_of_unity_table_generator(modsqrt(npru, p), reducer, n)
+            rootOfUnityTable = root_of_unity_table_generator(npru, reducer, n ÷ 2)
         else
-            rootOfUnityTable = gpu_root_of_unity_table_generator(modsqrt(npru, p), reducer, n)
+            rootOfUnityTable = gpu_root_of_unity_table_generator(npru, reducer, n ÷ 2)
         end
 
         if log2n <= 11
@@ -124,6 +128,13 @@ struct NTTPlan{T<:INTTYPES}
     end
 end
 
+"""
+    struct INTTPlan{T<:Union{Int32, Int64, UInt32, UInt64}}
+
+Struct containing all information necessary to perform a NTT.
+Either construct directly through `INTTPlan(n, p, npru)`, or see
+`plan_ntt()`
+"""
 struct INTTPlan{T<:INTTYPES}
     n::Int32
     p::T
@@ -136,7 +147,7 @@ struct INTTPlan{T<:INTTYPES}
 
     function INTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:INTTYPES
         @assert ispow2(n)
-        @assert p % (2 * n) == 1
+        @assert p % n == 1
         n = Int32(n)
         log2n = intlog2(n)
 
@@ -147,9 +158,9 @@ struct INTTPlan{T<:INTTYPES}
 
         reducer = BarrettReducer(p)
         if memorysafe
-            rootOfUnityTable = root_of_unity_table_generator(modsqrt(npruinv, p), reducer, n)
+            rootOfUnityTable = root_of_unity_table_generator(npruinv, reducer, n ÷ 2)
         else
-            rootOfUnityTable = gpu_root_of_unity_table_generator(modsqrt(npruinv, p), reducer, n)
+            rootOfUnityTable = gpu_root_of_unity_table_generator(npruinv, reducer, n ÷ 2)
         end
 
         if log2n <= 11
@@ -307,10 +318,22 @@ function compile_kernel(params::KernelConfig, n_inverse::T, log2n::Int32, modulu
     return func
 end
 
-function plan_ntt(len::Integer, p::Integer, npru::Integer; memorysafe = false)
+"""
+    plan_ntt(len::Integer, p::Integer, npru::Integer; memorysafe = false) -> Tuple{NTTPlan, INTTPlan}
+
+Returns a NTTPlan, as well as the inverse INTTPlan to be used in 
+`ntt!()` and `intt!()`. Type of NTT is determined by p, which must be in
+`Union{Int32, Int64, UInt32, UInt64}`.
+
+# Arguments:
+- `len`: Length of NTT (must be power of 2)
+- `p`: Characteristic of field to perform NTT in.
+- `npru`: len-th primitive root of unity of `p`. No validation is done, see `primitive_nth_root_of_unity()` to generate.
+- `memorysafe`: Boolean to determine whether to store root-of-unity table in CPU or GPU memory. Defaults to false, set true if GPU memory is a bottleneck. Greatly impacts performance if set to true.
+"""
+function plan_ntt(len::Integer, p::INTTYPES, npru::INTTYPES; memorysafe = false)::Tuple{NTTPlan, INTTPlan}
     @assert ispow2(len) "len must be a power of 2."
     @assert isprime(p) "p must be prime."
-    p = Unsigned(p)
     @assert p < typemax(typeof(p)) >> 2 "p must be smaller than typemax(p) for Barrett reduction"
     npru = typeof(p)(npru)
     # @assert is_primitive_root(npru, p, n) this computation takes too long
@@ -318,30 +341,73 @@ function plan_ntt(len::Integer, p::Integer, npru::Integer; memorysafe = false)
     return NTTPlan(len, p, npru; memorysafe = memorysafe), INTTPlan(len, p, npru; memorysafe = memorysafe)
 end
 
-function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput = false) where T<:INTTYPES
+"""
+    ntt!(vec::CuVector{T}, dest::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:Union{Int32, Int64, UInt32, UInt64}
+
+Takes the NTT according to `plan` of `vec`, storing the result in `dest`. 
+
+# Arguments:
+- `vec`: Source vector of NTT.
+- `dest`: Destination vector of NTT.
+- `plan`: NTTPlan with ntt information. See `plan_ntt()` for generating plans.
+- `bitreversedoutput`: Bool determining whether output is in bit-reversed order. Defaults to false.
+
+If `vec` and `dest` are the same, and `bitreversedoutput` is true, then
+the NTT is done in-place. As a shortcut, an overload is provided:
+
+```jldoctest
+ntt!(vec::CuVector, plan::NTTPlan, bitreversedoutput::Bool = false)
+```
+"""
+function ntt!(vec::CuVector{T}, dest::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:INTTYPES
     @assert intlog2(length(vec)) == plan.log2len
 
     if plan.rootOfUnityTable isa Vector{T}
         curoutable = CuArray(plan.rootOfUnityTable)
-        for kernel in plan.compiledKernels
-            CUDA.@sync kernel(vec, vec, curoutable)
+        plan.compiledKernels[1](vec, dest, curoutable)
+        for i in 2:length(plan.compiledKernels)
+            plan.compiledKernels[i](dest, dest, curoutable)
         end
+        CUDA.@sync nothing
         CUDA.unsafe_free!(curoutable)
     else
-        for kernel in plan.compiledKernels
-            kernel(vec, vec, plan.rootOfUnityTable)
+        plan.compiledKernels[1](vec, dest, plan.rootOfUnityTable)
+        for i in 2:length(plan.compiledKernels)
+            plan.compiledKernels[i](dest, dest, plan.rootOfUnityTable)
         end
     end
     
     if !bitreversedoutput
-        correct = parallel_bit_reverse_copy(vec)
-        vec .= correct
+        correct = parallel_bit_reverse_copy(dest)
+        dest .= correct
     end
 
     return nothing
 end
 
-function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:INTTYPES
+function ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:INTTYPES
+    return ntt!(vec, vec, plan, bitreversedoutput)
+end
+
+"""
+    intt!(vec::CuVector{T}, dest::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:Union{Int32, Int64, UInt32, UInt64}
+
+Takes the INTT according to `plan` of `vec`, storing the result in `dest`. 
+
+# Arguments:
+- `vec`: Source vector of INTT.
+- `dest`: Destination vector of INTT.
+- `plan`: INTTPlan with intt information. See `plan_ntt()` for generating plans.
+- `bitreversedinput`: Bool determining whether input is in bit-reversed order. Defaults to false.
+
+If `vec` and `dest` are the same, and `bitreversedoutput` is true, then
+the INTT is done in-place. As a shortcut, an overload is provided:
+
+```jldoctest
+intt!(vec::CuVector, plan::INTTPlan, bitreversedinput::Bool = false)
+```
+"""
+function intt!(vec::CuVector{T}, dest::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:INTTYPES
     @assert intlog2(length(vec)) == plan.log2len
 
     if !bitreversedinput
@@ -351,13 +417,22 @@ function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = fal
 
     if plan.rootOfUnityTable isa Vector{T}
         curoutable = CuArray(plan.rootOfUnityTable)
-        for kernel in plan.compiledKernels
-            CUDA.@sync kernel(vec, vec, curoutable)
+        plan.compiledKernels[1](vec, dest, curoutable)
+        for i in 2:length(plan.compiledKernels)
+            plan.compiledKernels[i](dest, dest, curoutable)
         end
+        CUDA.@sync nothing
         CUDA.unsafe_free!(curoutable)
     else
-        for kernel in plan.compiledKernels
-            kernel(vec, vec, plan.rootOfUnityTable)
+        plan.compiledKernels[1](vec, dest, plan.rootOfUnityTable)
+        for i in 2:length(plan.compiledKernels)
+            plan.compiledKernels[i](dest, dest, plan.rootOfUnityTable)
         end
     end
+
+    return nothing
+end
+
+function intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:INTTYPES
+    return intt!(vec, vec, plan, bitreversedinput)
 end

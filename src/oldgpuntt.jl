@@ -11,7 +11,7 @@ function generate_theta_m(p::T, len, log2len, npru::T) where T<:Integer
     return result
 end
 
-function old_ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:Unsigned
+function old_ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:INTTYPES
     if length(vec) != plan.n
         throw(ArgumentError("Plan is for length $(plan.n), input vector is length $(length(vec))"))
     end
@@ -45,7 +45,7 @@ function old_ntt!(vec::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = 
     return nothing
 end
 
-function old_intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:Unsigned
+function old_intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool = false) where T<:INTTYPES
     if length(vec) != plan.n
         throw(ArgumentError("Plan is for length $(plan.n), input vector is length $(length(vec))"))
     end
@@ -79,7 +79,7 @@ function old_intt!(vec::CuVector{T}, plan::INTTPlan{T}, bitreversedinput::Bool =
     return nothing
 end
 
-function normalize_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, n_inverse::T, offset::Int) where T<:Unsigned
+function normalize_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, n_inverse::T, offset::Int) where T<:INTTYPES
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
     vec[idx] = mul_mod(vec[idx], n_inverse, modulus)
     vec[idx + offset] = mul_mod(vec[idx + offset], n_inverse, modulus)
@@ -87,7 +87,7 @@ function normalize_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, n_inverse
     return nothing
 end
 
-function old_ntt_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, theta_m::T, magicmask::Int, magicbits::Int, m::Int, m2::Int) where T<:Unsigned
+function old_ntt_kernel!(vec::CuDeviceArray{T}, modulus::Reducer{T}, theta_m::T, magicmask::Int, magicbits::Int, m::Int, m2::Int) where T<:INTTYPES
     idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x - 1
     k = m * (idx & magicmask) + (idx >> magicbits)
 

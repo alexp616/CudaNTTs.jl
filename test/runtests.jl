@@ -4,7 +4,7 @@ using Test
 using CUDA
 
 function test_ntt()
-    for pow in 2:28
+    for pow in 1:28
         n = 2 ^ pow
         T = UInt64
         p = T(4611685989973229569)
@@ -25,7 +25,7 @@ function test_ntt()
 end
 
 function test_intt()
-    for pow in 2:28
+    for pow in 1:28
         n = 2 ^ pow
         T = UInt64
         p = T(4611685989973229569)

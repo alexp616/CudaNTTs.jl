@@ -1,4 +1,4 @@
-function sub_mod(x::T, y::T, m::T) where T<:Unsigned
+function sub_mod(x::T, y::T, m::T) where T<:Integer
     if y > x
         return (m - y) + x
     else
@@ -6,7 +6,7 @@ function sub_mod(x::T, y::T, m::T) where T<:Unsigned
     end
 end
 
-function add_mod(x::T, y::T, m::T)::T where T<:Unsigned
+function add_mod(x::T, y::T, m::T)::T where T<:Integer
     result = x + y
     return (result >= m || result < x) ? result - m : result
 end
@@ -16,10 +16,14 @@ function mywiden(x)
 end
 
 macro generate_widen()
+    int_types = [Int32, Int64, Int128]
     uint_types = [UInt32, UInt64, UInt128]
 
     widen_methods = quote end
     for i in 1:length(uint_types) - 1
+        push!(widen_methods.args, :(
+            Base.@eval mywiden(x::$(int_types[i])) = $(int_types[i+1])(x)
+        ))
         push!(widen_methods.args, :(
             Base.@eval mywiden(x::$(uint_types[i])) = $(uint_types[i+1])(x)
         ))
@@ -41,7 +45,7 @@ function mywidemul(x::T, y::T) where T<:Integer
 end
 
 function mul_mod(x::T, y::T, m::T) where T<:Integer
-    return T(mod(mywidemul(x, y), m))
+    return unsafe_trunc(T, mod(mywidemul(x, y), m))
 end
 
 function power_mod(n::T, p::Integer, m::T) where T<:Integer

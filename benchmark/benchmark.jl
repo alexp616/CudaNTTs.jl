@@ -19,4 +19,4 @@ function benchmark(log2n)
     display(@benchmark CUDA.@sync NTTs.ntt!($vec2, $nttplan, true))
 end
 
-benchmark(25)
+benchmark(24)

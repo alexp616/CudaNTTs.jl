@@ -39,9 +39,10 @@ function is_primitive_root(npru::T, p::T, order::Integer) where T<:Integer
 end
 
 """
-    primitive_nth_root_of_unity(n::Integer, p::Integer)
+    primitive_nth_root_of_unity(n::Integer, p::Integer) -> Integer
 
-Return a primitive n-th root of unity of the field 𝔽ₚ
+Return a primitive n-th root of unity of the field 𝔽ₚ. Throws error
+if no such root exists.
 """
 function primitive_nth_root_of_unity(n::Integer, p::Integer)
     @assert ispow2(n)
@@ -79,8 +80,6 @@ function root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where
     end
 
     bit_reverse_vector(result)
-
-    resize!(result, n ÷ 2)
     return result
 end
 
