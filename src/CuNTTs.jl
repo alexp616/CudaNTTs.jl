@@ -1,4 +1,4 @@
-module NTTs
+module CuNTTs
 
 using CUDA
 using Primes
