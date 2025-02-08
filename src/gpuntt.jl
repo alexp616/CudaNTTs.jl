@@ -1,3 +1,5 @@
+CC89() = string(capability(device())) == "8.9.0"
+
 """
     struct NTTPlan{T<:Union{Int32, Int64, UInt32, UInt64}}
 
@@ -91,11 +93,11 @@ struct NTTPlan{T<:INTTYPES}
                 push!(cfgs, KernelConfig(65536, 1, 4, 128, 1024 * sizeof(T), 9, 0, 0, 8, true))
                 push!(cfgs, KernelConfig(256, 256, 4, 128, 1024 * sizeof(T), 9, 8, 0, 8, true))
                 push!(cfgs, KernelConfig(65536, 1, 512, 1, 1024 * sizeof(T), 9, 16, 0, 10, false))
-            elseif log2n == 27 && CC89
+            elseif log2n == 27 && CC89()
                 push!(cfgs, KernelConfig(131072, 1, 4, 128, 1024 * sizeof(T), 9, 0, 0, 8, true))
                 push!(cfgs, KernelConfig(512, 256, 2, 256, 1024 * sizeof(T), 9, 8, 0, 9, true))
                 push!(cfgs, KernelConfig(131072, 1, 512, 1, 1024 * sizeof(T), 9, 17, 0, 10, false))
-            elseif log2n == 28 && CC89
+            elseif log2n == 28 && CC89()
                 push!(cfgs, KernelConfig(262144, 1, 2, 256, 1024 * sizeof(T), 9, 0, 0, 9, true))
                 push!(cfgs, KernelConfig(512, 512, 2, 256, 1024 * sizeof(T), 9, 9, 0, 9, true))
                 push!(cfgs, KernelConfig(262144, 1, 512, 1, 1024 * sizeof(T), 9, 18, 0, 10, false))
@@ -227,11 +229,11 @@ struct INTTPlan{T<:INTTYPES}
                 push!(cfgs, KernelConfig(65536, 1, 512, 1, 1024 * sizeof(T), 9, 25, 16, 10, false))
                 push!(cfgs, KernelConfig(256, 256, 4, 128, 1024 * sizeof(T), 9, 15, 8, 8, false))
                 push!(cfgs, KernelConfig(65536, 1, 4, 128, 1024 * sizeof(T), 9, 7, 0, 8, true))
-            elseif log2n == 27 && CC89
+            elseif log2n == 27 && CC89()
                 push!(cfgs, KernelConfig(131072, 1, 512, 1, 1024 * sizeof(T), 9, 26, 17, 10, false))
                 push!(cfgs, KernelConfig(512, 256, 2, 256, 1024 * sizeof(T), 9, 16, 8, 9, false))
                 push!(cfgs, KernelConfig(131072, 1, 4, 128, 1024 * sizeof(T), 9, 7, 0, 8, true))
-            elseif log2n == 28 && CC89
+            elseif log2n == 28 && CC89()
                 push!(cfgs, KernelConfig(262144, 1, 512, 1, 1024 * sizeof(T), 9, 27, 18, 10, false))
                 push!(cfgs, KernelConfig(512, 512, 2, 256, 1024 * sizeof(T), 9, 17, 9, 9, false))
                 push!(cfgs, KernelConfig(262144, 1, 2, 256, 1024 * sizeof(T), 9, 8, 0, 9, true))
