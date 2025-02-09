@@ -60,6 +60,6 @@ to define their own modular reduction algorithms to pass in.
 - I haven't tested anything with passing in negative integers yet, so it's up to the used to user to make sure their NTTs don't involve negative integers.
 - The kernels are all optimized for `UInt64` operations, so this is the ideal type to perform NTTs with. This can be obtained by passing in `CuVector{UInt64}`'s into `ntt!()` and `intt!()`, and making sure `p` is a UInt64 in `plan_ntt()`.
 - `UInt32` kernels are still faster, though not by a factor of 2. So, if a problem only requires `UInt32` precision, then it will be faster.
-- See documentation of `plan_ntt()` for the `memorysafe` option, which trades off speed for holding less GPU memory.
+- See documentation of `plan_ntt()` for the `memoryefficient` option, which trades off speed for holding less memory.
 - See documentation of `ntt!()` and `intt!()` for `bitreversedoutput` and `bitreversedinput`. If these are set to true, and the destination and source vector are the same, then the `NTT` and `INTT` are done in-place.
 - The usage I developed this for takes in inputs in $\mathbb{Z}_q[x]/(x^n - 1)$, so inputs in $\mathbb{Z}_q[x]/(x^n + 1)$ are not supported. If needed, this change isn't too difficult.

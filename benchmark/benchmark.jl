@@ -8,7 +8,7 @@ function benchmark(log2n)
     p = T(4611685989973229569)
 
     npru = CudaNTTs.primitive_nth_root_of_unity(n, p)
-    nttplan, _ = CudaNTTs.plan_ntt(n, p, npru)
+    nttplan, _ = CudaNTTs.plan_ntt(n, p, npru; memoryefficient = false)
 
     cpuvec = [T(i) for i in 1:n]
 
@@ -19,4 +19,4 @@ function benchmark(log2n)
     display(@benchmark CUDA.@sync CudaNTTs.ntt!($vec2, $nttplan, true))
 end
 
-benchmark(27)
+benchmark(24)

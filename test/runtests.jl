@@ -10,7 +10,7 @@ function test_ntt()
         p = T(4611685989973229569)
 
         npru = CudaNTTs.primitive_nth_root_of_unity(n, p)
-        nttplan, _ = CudaNTTs.plan_ntt(n, p, npru; memorysafe = false)
+        nttplan, _ = CudaNTTs.plan_ntt(n, p, npru; memoryefficient = false)
 
         cpuvec = rand(T(0):T(p - 1), n)
 
@@ -31,7 +31,7 @@ function test_intt()
         p = T(4611685989973229569)
 
         npru = CudaNTTs.primitive_nth_root_of_unity(n, p)
-        _, inttplan = CudaNTTs.plan_ntt(n, p, npru; memorysafe = false)
+        _, inttplan = CudaNTTs.plan_ntt(n, p, npru; memoryefficient = false)
 
         cpuvec = rand(T(0):T(p - 1), n)
 

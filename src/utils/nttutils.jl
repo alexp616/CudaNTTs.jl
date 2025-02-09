@@ -65,22 +65,26 @@ function primitive_nth_root_of_unity(n::Integer, p::Integer)
     return g
 end
 
-function gpu_root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where T<:Integer
-    return CuArray(root_of_unity_table_generator(npru, p, n))
+function gpu_root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where T<:INTTYPES
+    log2n = intlog2(Int32(n))
+    arr = CUDA.zeros(T, n)
+
+    kernel = @cuda launch=false gpu_root_of_unity_table_generator_kernel!(npru, arr, log2n, p)
+    config = launch_configuration(kernel.fun)
+    threads = min(length(arr), Base._prevpow2(config.threads))
+    blocks = div(length(arr), threads)
+
+    kernel(npru, arr, log2n, p; threads = threads, blocks = blocks)
+
+    return arr
 end
 
-function root_of_unity_table_generator(npru::T, p::Reducer{T}, n::Integer) where T<:Integer
-    # @assert is_primitive_root(npru, p, n)
+function gpu_root_of_unity_table_generator_kernel!(npru::T, arr::CuDeviceVector{T}, log2n::Int32, m::Reducer{T}) where T<:INTTYPES
+    idx1 = threadIdx().x + (blockIdx().x - o) * blockDim().x - o
 
-    result = zeros(T, n)
-    curr = T(1)
-    for i in eachindex(result)
-        result[i] = curr
-        curr = mul_mod(curr, npru, p)
-    end
+    @inbounds arr[idx1 + o] = br_power_mod(npru, idx1, log2n, m)
 
-    bit_reverse_vector(result)
-    return result
+    return 
 end
 
 function find_ntt_primes(len::Int, T = UInt32, num = 10)

@@ -62,3 +62,20 @@ function power_mod(n::T, p::Integer, m::T) where T<:Integer
 
     return result
 end
+
+function br_power_mod(n::T, pow::Int32, log2n::Int32, m::T) where T<:Integer
+    result = one(T)
+    base = n
+
+    mask = o << (log2n - o)
+
+    for i in o:log2n
+        if pow & mask != zero(Int32)
+            result = mul_mod(result, base, m)
+        end
+        base = mul_mod(base, base, m)
+        mask >>= 1
+    end
+
+    return result
+end

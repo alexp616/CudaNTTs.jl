@@ -13,18 +13,18 @@ struct NTTPlan{T<:INTTYPES}
     reducer::Reducer{T}
     npru::T
     log2len::Int32
-    rootOfUnityTable::Union{CuVector{T}, Vector{T}}
+    rootOfUnityTable::Union{CuVector{T}, T}
     compiledKernels::Vector{Function}
 
-    function NTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:Integer
+    function NTTPlan(n::Integer, p::T, npru::T; memoryefficient = false) where T<:Integer
         @assert ispow2(n)
         @assert p % n == 1
         n = Int32(n)
         log2n = intlog2(n)
 
         reducer = BarrettReducer(p)
-        if memorysafe
-            rootOfUnityTable = root_of_unity_table_generator(npru, reducer, n ÷ 2)
+        if memoryefficient
+            rootOfUnityTable = npru
         else
             rootOfUnityTable = gpu_root_of_unity_table_generator(npru, reducer, n ÷ 2)
         end
@@ -32,8 +32,13 @@ struct NTTPlan{T<:INTTYPES}
         if log2n <= 11
             compiledKernels = Function[]
             temp = CUDA.zeros(T, 1)
-            kernel = @cuda launch=false small_ntt_kernel!(temp, temp, temp, reducer, log2n)
-            func(in, out, rouTable) = kernel(in, out, rouTable, reducer, log2n; threads = n ÷ 2, blocks = 1, shmem = sizeof(T) * n)
+
+            if memoryefficient
+                kernel = @cuda launch=false me_small_ntt_kernel!(temp, temp, rootOfUnityTable, reducer, log2n)
+            else
+                kernel = @cuda launch=false small_ntt_kernel!(temp, temp, rootOfUnityTable, reducer, log2n)
+            end
+            func(in, out) = kernel(in, out, rootOfUnityTable, reducer, log2n; threads = n ÷ 2, blocks = 1, shmem = sizeof(T) * n)
             push!(compiledKernels, func)
             return new{T}(n, p, reducer, npru, log2n, rootOfUnityTable, compiledKernels)
         elseif log2n <= 28
@@ -114,13 +119,13 @@ struct NTTPlan{T<:INTTYPES}
             end
 
             if log2n < 25
-                compiledKernels = map(params -> compile_kernel(params, log2n, reducer), cfgs)
+                compiledKernels = map(params -> compile_kernel(params, log2n, reducer, rootOfUnityTable), cfgs)
             else
                 compiledKernels = Function[]
                 for i in 1:length(cfgs) - 1
-                    push!(compiledKernels, compile_kernel(cfgs[i], log2n, reducer))
+                    push!(compiledKernels, compile_kernel(cfgs[i], log2n, reducer, rootOfUnityTable))
                 end
-                push!(compiledKernels, compile_kernel(cfgs[end], log2n, reducer, false))
+                push!(compiledKernels, compile_kernel(cfgs[end], log2n, reducer, rootOfUnityTable, false))
             end
             
             return new{T}(n, p, reducer, npru, log2n, rootOfUnityTable, compiledKernels)
@@ -144,10 +149,10 @@ struct INTTPlan{T<:INTTYPES}
     npruinv::T
     n_inverse::T
     log2len::Int32
-    rootOfUnityTable::Union{CuVector{T}, Vector{T}}
+    rootOfUnityTable::Union{CuVector{T}, T}
     compiledKernels::Vector{Function}
 
-    function INTTPlan(n::Integer, p::T, npru::T; memorysafe = false) where T<:INTTYPES
+    function INTTPlan(n::Integer, p::T, npru::T; memoryefficient = false) where T<:INTTYPES
         @assert ispow2(n)
         @assert p % n == 1
         n = Int32(n)
@@ -159,8 +164,8 @@ struct INTTPlan{T<:INTTYPES}
         @assert BigInt(n) * BigInt(n_inverse) % p == 1
 
         reducer = BarrettReducer(p)
-        if memorysafe
-            rootOfUnityTable = root_of_unity_table_generator(npruinv, reducer, n ÷ 2)
+        if memoryefficient
+            rootOfUnityTable = npruinv
         else
             rootOfUnityTable = gpu_root_of_unity_table_generator(npruinv, reducer, n ÷ 2)
         end
@@ -168,9 +173,15 @@ struct INTTPlan{T<:INTTYPES}
         if log2n <= 11
             compiledKernels = Function[]
             temp = CUDA.zeros(T, 1)
-            kernel = @cuda launch=false small_intt_kernel!(temp, temp, temp, reducer, log2n, n_inverse)
-            func(in, out, rouTable) = kernel(in, out, rouTable, reducer, log2n, n_inverse; threads = n ÷ 2, blocks = 1, shmem = sizeof(T) * n)
+
+            if memoryefficient
+                kernel = @cuda launch=false me_small_intt_kernel!(temp, temp, rootOfUnityTable, reducer, log2n, n_inverse)
+            else
+                kernel = @cuda launch=false small_intt_kernel!(temp, temp, rootOfUnityTable, reducer, log2n, n_inverse)
+            end
+            func(in, out) = kernel(in, out, rootOfUnityTable, reducer, log2n, n_inverse; threads = n ÷ 2, blocks = 1, shmem = sizeof(T) * n)
             push!(compiledKernels, func)
+
             return new{T}(n, p, reducer, npruinv, n_inverse, log2n, rootOfUnityTable, compiledKernels)
         elseif log2n <= 28
             cfgs = KernelConfig[]
@@ -250,13 +261,13 @@ struct INTTPlan{T<:INTTYPES}
             end
 
             if log2n < 25
-                compiledKernels = map(params -> compile_kernel(params, n_inverse, log2n, reducer), cfgs)
+                compiledKernels = map(params -> compile_kernel(params, n_inverse, log2n, reducer, rootOfUnityTable), cfgs)
             else
                 compiledKernels = Function[]
 
-                push!(compiledKernels, compile_kernel(cfgs[1], n_inverse, log2n, reducer, false))
+                push!(compiledKernels, compile_kernel(cfgs[1], n_inverse, log2n, reducer, rootOfUnityTable, false))
                 for i in 2:length(cfgs)
-                    push!(compiledKernels, compile_kernel(cfgs[i], n_inverse, log2n, reducer))
+                    push!(compiledKernels, compile_kernel(cfgs[i], n_inverse, log2n, reducer, rootOfUnityTable))
                 end
             end
 
@@ -286,7 +297,7 @@ struct KernelConfig
     end
 end
 
-function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T}, standard::Bool = true) where T<:INTTYPES
+function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T}, rouTable::Union{CuVector{T}, T}, standard::Bool = true) where T<:INTTYPES
     temp = CUDA.zeros(T, 1)
     shmem_length = Int32(params.shared_memory ÷ sizeof(T))
 
@@ -294,34 +305,52 @@ function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T},
     # println(occupancy(kernel.fun, 1024; shmem = 1024 * 2 * sizeof(T)))
     # throw("sigma")
 
-    if standard
-        kernel = @cuda launch=false ntt_kernel1!(temp, temp, temp, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+    if rouTable isa CuVector{T}
+        if standard
+            kernel = @cuda launch=false ntt_kernel1!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+        else
+            kernel = @cuda launch=false ntt_kernel2!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+        end
     else
-        kernel = @cuda launch=false ntt_kernel2!(temp, temp, temp, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+        # rouTable isn't actually a table, but just the root of unity
+        if standard
+            kernel = @cuda launch=false me_ntt_kernel1!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+        else
+            kernel = @cuda launch=false me_ntt_kernel2!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+        end
     end
 
-    func(in, out, rouTable) = kernel(in, out, rouTable, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel; threads = (params.blockdim_x, params.blockdim_y), blocks = (params.griddim_x, params.griddim_y), shmem = params.shared_memory)
+    func(in, out) = kernel(in, out, rouTable, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel; threads = (params.blockdim_x, params.blockdim_y), blocks = (params.griddim_x, params.griddim_y), shmem = params.shared_memory)
 
     return func
 end
 
-function compile_kernel(params::KernelConfig, n_inverse::T, log2n::Int32, modulus::Reducer{T}, standard::Bool = true) where T<:INTTYPES
+function compile_kernel(params::KernelConfig, n_inverse::T, log2n::Int32, modulus::Reducer{T}, rouTable::Union{CuVector{T}, T}, standard::Bool = true) where T<:INTTYPES
     temp = CUDA.zeros(T, 1)
     shmem_length = Int32(params.shared_memory ÷ sizeof(T))
 
-    if standard
-        kernel = @cuda launch=false intt_kernel1!(temp, temp, temp, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel)
+    if rouTable isa CuVector{T}
+        if standard
+            kernel = @cuda launch=false intt_kernel1!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel)
+        else
+            kernel = @cuda launch=false intt_kernel2!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel)
+        end
     else
-        kernel = @cuda launch=false intt_kernel2!(temp, temp, temp, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel)
+        # rouTable isn't actually a table, but just the root of unity
+        if standard
+            kernel = @cuda launch=false me_intt_kernel1!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel)
+        else
+            kernel = @cuda launch=false me_intt_kernel2!(temp, temp, rouTable, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel)
+        end
     end
 
-    func(in, out, rouTable) = kernel(in, out, rouTable, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel; threads = (params.blockdim_x, params.blockdim_y), blocks = (params.griddim_x, params.griddim_y), shmem = params.shared_memory)
+    func(in, out) = kernel(in, out, rouTable, modulus, params.shared_index, params.logm, params.k, params.outer_iteration_count, log2n, shmem_length, n_inverse, params.not_last_kernel; threads = (params.blockdim_x, params.blockdim_y), blocks = (params.griddim_x, params.griddim_y), shmem = params.shared_memory)
 
     return func
 end
 
 """
-    plan_ntt(len::Integer, p::Integer, npru::Integer; memorysafe = false) -> Tuple{NTTPlan, INTTPlan}
+    plan_ntt(len::Integer, p::Integer, npru::Integer; memoryefficient = false) -> Tuple{NTTPlan, INTTPlan}
 
 Returns a NTTPlan, as well as the inverse INTTPlan to be used in 
 `ntt!()` and `intt!()`. Type of NTT is determined by p, which must be in
@@ -331,16 +360,16 @@ Returns a NTTPlan, as well as the inverse INTTPlan to be used in
 - `len`: Length of NTT (must be power of 2)
 - `p`: Characteristic of field to perform NTT in.
 - `npru`: len-th primitive root of unity of `p`. No validation is done, see `primitive_nth_root_of_unity()` to generate.
-- `memorysafe`: Boolean to determine whether to store root-of-unity table in CPU or GPU memory. Defaults to false, set true if GPU memory is a bottleneck. Greatly impacts performance if set to true.
+- `memoryefficient`: Boolean to determine whether or not to generate root of unity table. If false, NTT will be slower but use half the memory.
 """
-function plan_ntt(len::Integer, p::INTTYPES, npru::INTTYPES; memorysafe = false)::Tuple{NTTPlan, INTTPlan}
+function plan_ntt(len::Integer, p::INTTYPES, npru::INTTYPES; memoryefficient = false)::Tuple{NTTPlan, INTTPlan}
     @assert ispow2(len) "len must be a power of 2."
     @assert isprime(p) "p must be prime."
     @assert p < typemax(typeof(p)) >> 2 "p must be smaller than typemax(p) for Barrett reduction"
     npru = typeof(p)(npru)
     # @assert is_primitive_root(npru, p, n) this computation takes too long
 
-    return NTTPlan(len, p, npru; memorysafe = memorysafe), INTTPlan(len, p, npru; memorysafe = memorysafe)
+    return NTTPlan(len, p, npru; memoryefficient = memoryefficient), INTTPlan(len, p, npru; memoryefficient = memoryefficient)
 end
 
 """
@@ -364,21 +393,11 @@ ntt!(vec::CuVector, plan::NTTPlan, bitreversedoutput::Bool = false)
 function ntt!(vec::CuVector{T}, dest::CuVector{T}, plan::NTTPlan{T}, bitreversedoutput::Bool = false) where T<:INTTYPES
     @assert intlog2(length(vec)) == plan.log2len
 
-    if plan.rootOfUnityTable isa Vector{T}
-        curoutable = CuArray(plan.rootOfUnityTable)
-        plan.compiledKernels[1](vec, dest, curoutable)
-        for i in 2:length(plan.compiledKernels)
-            plan.compiledKernels[i](dest, dest, curoutable)
-        end
-        CUDA.@sync nothing
-        CUDA.unsafe_free!(curoutable)
-    else
-        plan.compiledKernels[1](vec, dest, plan.rootOfUnityTable)
-        for i in 2:length(plan.compiledKernels)
-            plan.compiledKernels[i](dest, dest, plan.rootOfUnityTable)
-        end
+    plan.compiledKernels[1](vec, dest)
+    for i in 2:length(plan.compiledKernels)
+        plan.compiledKernels[i](dest, dest)
     end
-    
+
     if !bitreversedoutput
         correct = parallel_bit_reverse_copy(dest)
         dest .= correct
@@ -417,19 +436,9 @@ function intt!(vec::CuVector{T}, dest::CuVector{T}, plan::INTTPlan{T}, bitrevers
         vec .= correct
     end
 
-    if plan.rootOfUnityTable isa Vector{T}
-        curoutable = CuArray(plan.rootOfUnityTable)
-        plan.compiledKernels[1](vec, dest, curoutable)
-        for i in 2:length(plan.compiledKernels)
-            plan.compiledKernels[i](dest, dest, curoutable)
-        end
-        CUDA.@sync nothing
-        CUDA.unsafe_free!(curoutable)
-    else
-        plan.compiledKernels[1](vec, dest, plan.rootOfUnityTable)
-        for i in 2:length(plan.compiledKernels)
-            plan.compiledKernels[i](dest, dest, plan.rootOfUnityTable)
-        end
+    plan.compiledKernels[1](vec, dest)
+    for i in 2:length(plan.compiledKernels)
+        plan.compiledKernels[i](dest, dest)
     end
 
     return nothing

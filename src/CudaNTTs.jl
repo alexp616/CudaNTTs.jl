@@ -11,6 +11,7 @@ export ntt!
 export intt!
 
 global const INTTYPES = Union{UInt32, UInt64, Int32, Int64}
+global const o = Int32(1) # For kernel index arithmetic, LLVM usually optimizes it away anyways
 
 include("reducers.jl")
 include("utils/nttutils.jl")
