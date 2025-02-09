@@ -6,7 +6,7 @@ A package for computing number-theoretic transforms using [CUDA.jl](https://gith
 
 ## Credits
 **This implementation is ported to Julia from [this](https://github.com/Alisah-Ozcan/GPU-NTT) implementation.
-All credit for the NTT implementations for ring sizes $2^{12}$ through $2^{28}$ go to the author, Alisah-Ozcan.**
+All credit for the NTT implementations for ring sizes $2^{12}$ through $2^{28}$ go to the author, Alişah Özcan.**
 
 ## Usage
 To start, install and import the package:
