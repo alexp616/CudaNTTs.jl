@@ -1,16 +1,16 @@
-abstract type Reducer{T<:INTTYPES} end
+abstract type Reducer{T<:Integer} end
 
 """
     BarrettReducer{T<:Union{UInt32, UInt64, Int32, Int64}}
 
 Struct holding constants needed for barrett reduction.
 """
-struct BarrettReducer{T<:INTTYPES} <: Reducer{T}
+struct BarrettReducer{T<:Integer} <: Reducer{T}
     p::T
     k::Int
     μ::T
 
-    function BarrettReducer(p::T) where T<:INTTYPES
+    function BarrettReducer(p::T) where T<:Integer
         @assert p < typemax(T) >> 2
         k = Int(ceil(log2(p)))
         μ = T(fld(BigInt(1) << (2*k + 1), p))
@@ -18,12 +18,12 @@ struct BarrettReducer{T<:INTTYPES} <: Reducer{T}
     end
 end
 
-@inline function add_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:INTTYPES
+@inline function add_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:Integer
     result = x + y
     return (result >= m.p || result < x) ? result - m.p : result
 end
 
-@inline function sub_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:INTTYPES
+@inline function sub_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:Integer
     if y > x
         return (m.p - y) + x
     else
@@ -31,7 +31,7 @@ end
     end
 end
 
-@inline function mul_mod(a::T, b::T, reducer::BarrettReducer{T})::T where T<:INTTYPES
+@inline function mul_mod(a::T, b::T, reducer::BarrettReducer{T})::T where T<:Integer
     C = mywidemul(a, b)
     p = reducer.p
     μ = reducer.μ
@@ -46,7 +46,7 @@ end
     return unsafe_trunc(T, Cout)
 end
 
-function power_mod(n::T, p::Integer, m::BarrettReducer{T}) where T<:INTTYPES
+function power_mod(n::T, p::Integer, m::BarrettReducer{T}) where T<:Integer
     result = one(T)
     base = n
 
