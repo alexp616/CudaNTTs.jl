@@ -301,7 +301,13 @@ function compile_kernel(params::KernelConfig, log2n::Int32, modulus::Reducer{T},
     temp = CUDA.zeros(T, 1)
     shmem_length = Int32(params.shared_memory ÷ sizeof(T))
 
+    # open("dump.txt", "w") do io
+    #     redirect_stdout(io) do
+    #         @device_code_llvm kernel = @cuda launch=false ntt_kernel1!(temp, temp, temp, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+    #     end
+    # end
     # @device_code_ptx kernel = @cuda launch=false ntt_kernel1!(temp, temp, temp, modulus, params.shared_index, params.logm, params.outer_iteration_count, log2n, shmem_length, params.not_last_kernel)
+    
     # println(occupancy(kernel.fun, 1024; shmem = 1024 * 2 * sizeof(T)))
     # throw("sigma")
 

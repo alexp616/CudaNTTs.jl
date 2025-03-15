@@ -40,7 +40,7 @@ end
 Exists because Base.widen() widens Int128 to BigInt, which 
 CUDA doesn't like.
 """
-function mywidemul(x::T, y::T) where T<:Integer
+@inline function mywidemul(x::T, y::T) where T<:Integer
     return mywiden(x) * mywiden(y)
 end
 

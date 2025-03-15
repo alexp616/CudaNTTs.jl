@@ -1,3 +1,6 @@
+global const →(a::Int32, b::Int32) = Base.lshr_int(a, b)
+global const ←(a::Int32, b::Int32) = Base.shl_int(a, b)
+
 @inline function CTUnit(U::Core.LLVMPtr{T}, V::Core.LLVMPtr{T}, root::T, m::Reducer{T})::Nothing where T<:INTTYPES
     u_ = unsafe_load(U)
     v_ = mul_mod(unsafe_load(V), root, m)
@@ -31,18 +34,18 @@ function small_ntt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuD
     t_ = N_power - o
     t = blockDim().x
 
-    in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    in_shared_address = ((idx_x → t_) ← t_) + idx_x
     current_root_index = zero(Int32)
 
     for _ in o:N_power
         CUDA.sync_threads()
-        current_root_index = idx_x >> t_
+        current_root_index = idx_x → t_
 
         CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
-        t >>= 1
+        t = t → o
         t_ -= o
 
-        in_shared_address = (((threadIdx().x - o) >> t_) << t_) + threadIdx().x - o
+        in_shared_address = (((threadIdx().x - o) → t_) ← t_) + threadIdx().x - o
     end
     CUDA.sync_threads()
 
@@ -67,13 +70,13 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
-    offset = o << (N_power - logm - o)
+    offset = o ← (N_power - logm - o)
     t_ = shared_index
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_x) + (Int32(2) * block_y * offset)
 
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                     (blockDim().x * block_x) + (block_y * offset)
     
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -81,51 +84,51 @@ function ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     if (not_last_kernel)
         for _ in o:outer_iteration_count
             CUDA.sync_threads()
         
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     else
         for _ in o:(shared_index - Int32(5))
             CUDA.sync_threads()
 
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
 
         for _ in o:Int32(6)
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     end
@@ -151,13 +154,13 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
-    offset = o << (N_power - logm - o)
+    offset = o ← (N_power - logm - o)
     t_ = shared_index
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_y) + (Int32(2) * block_x * offset)
 
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                     (blockDim().x * block_y) + (block_x * offset)
     
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -165,51 +168,51 @@ function ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevice
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     if (not_last_kernel)
         for _ in o:outer_iteration_count
             CUDA.sync_threads()
         
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     else
         for _ in o:(shared_index - Int32(5))
             CUDA.sync_threads()
 
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
 
         for _ in o:Int32(6)
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), root_of_unity_table[current_root_index + o], modulus)
             
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     end
@@ -233,21 +236,21 @@ function small_intt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::Cu
     shared_memory[threadIdx().x] = polynomial_in[threadIdx().x]
     shared_memory[threadIdx().x + blockDim().x] = polynomial_in[threadIdx().x + blockDim().x]
 
-    t = o << t_
-    in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    t = o ← t_
+    in_shared_address = ((idx_x → t_) ← t_) + idx_x
     current_root_index = zero(Int32)
 
     for _ in o:N_power
         CUDA.sync_threads()
 
-        current_root_index = idx_x >> t_
+        current_root_index = idx_x → t_
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
 
-        t = t << 1
+        t = t ← o
         t_ += o
 
-        in_shared_address = ((idx_x >> t_) << t_) + idx_x
+        in_shared_address = ((idx_x → t_) ← t_) + idx_x
     end
     CUDA.sync_threads()
 
@@ -269,13 +272,13 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
-    offset = o << (N_power - k - o)
+    offset = o ← (N_power - k - o)
     t_ = shared_index + o - outer_iteration_count
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_x) + (Int32(2) * block_y * offset)
     
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_x) + (block_y * offset)
 
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -283,22 +286,22 @@ function intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     for _ in o:outer_iteration_count
         CUDA.sync_threads()
         
-        current_root_index = (omega_address >> t_2)
+        current_root_index = (omega_address → t_2)
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
 
-        t = t << 1
+        t = t ← o
         t_2 += o
         t_ += o
 
-        in_shared_address = ((shared_address >> t_) << t_) + shared_address
+        in_shared_address = ((shared_address → t_) ← t_) + shared_address
     end
     CUDA.sync_threads()
 
@@ -327,13 +330,13 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     shared_memory = CuDynamicSharedArray(T, shmem_length)
 
     t_2 = N_power - logm - o
-    offset = o << (N_power - k - o)
-    t_ = shared_index + 1 - outer_iteration_count
+    offset = o ← (N_power - k - o)
+    t_ = shared_index + o - outer_iteration_count
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_y) + (Int32(2) * block_x * offset)
     
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_y) + (block_x * offset)
 
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -341,22 +344,22 @@ function intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDevic
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     for _ in o:outer_iteration_count
         CUDA.sync_threads()
         
-        current_root_index = (omega_address >> t_2)
+        current_root_index = (omega_address → t_2)
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), inverse_root_of_unity_table[current_root_index + o], modulus)
 
-        t = t << 1
+        t = t ← o
         t_2 += o
         t_ += o
 
-        in_shared_address = ((shared_address >> t_) << t_) + shared_address
+        in_shared_address = ((shared_address → t_) ← t_) + shared_address
     end
     CUDA.sync_threads()
     if (last_kernel)
@@ -396,19 +399,19 @@ function me_small_ntt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out::
     t_ = log2nm1
     t = blockDim().x
 
-    in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    in_shared_address = ((idx_x → t_) ← t_) + idx_x
     current_root_index = zero(Int32)
 
     for _ in o:N_power
         CUDA.sync_threads()
-        current_root_index = idx_x >> t_
+        current_root_index = idx_x → t_
 
         CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-        t >>= 1
+        t = t → o
         t_ -= o
 
-        in_shared_address = (((threadIdx().x - o) >> t_) << t_) + threadIdx().x - o
+        in_shared_address = (((threadIdx().x - o) → t_) ← t_) + threadIdx().x - o
     end
     CUDA.sync_threads()
 
@@ -434,13 +437,13 @@ function me_ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDev
 
     log2nm1 = N_power - o
     t_2 = log2nm1 - logm
-    offset = o << t_2
+    offset = o ← t_2
     t_ = shared_index
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_x) + (Int32(2) * block_y * offset)
 
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                     (blockDim().x * block_x) + (block_y * offset)
     
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -448,51 +451,51 @@ function me_ntt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDev
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     if (not_last_kernel)
         for _ in o:outer_iteration_count
             CUDA.sync_threads()
         
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     else
         for _ in o:(shared_index - Int32(5))
             CUDA.sync_threads()
 
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
 
         for _ in o:Int32(6)
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     end
@@ -519,13 +522,13 @@ function me_ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDev
 
     log2nm1 = N_power - o
     t_2 = log2nm1 - logm
-    offset = o << t_2
+    offset = o ← t_2
     t_ = shared_index
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_y) + (Int32(2) * block_x * offset)
 
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                     (blockDim().x * block_y) + (block_x * offset)
     
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -533,51 +536,51 @@ function me_ntt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDev
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     if (not_last_kernel)
         for _ in o:outer_iteration_count
             CUDA.sync_threads()
         
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     else
         for _ in o:(shared_index - Int32(5))
             CUDA.sync_threads()
 
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
 
         for _ in o:Int32(6)
-            current_root_index = (omega_address >> t_2)
+            current_root_index = (omega_address → t_2)
 
             CTUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(root_of_unity, current_root_index, log2nm1, modulus), modulus)
             
-            t = t >> 1
+            t = t → o
             t_2 -= o
             t_ -= o
 
-            in_shared_address = ((shared_address >> t_) << t_) + shared_address
+            in_shared_address = ((shared_address → t_) ← t_) + shared_address
         end
         CUDA.sync_threads()
     end
@@ -602,21 +605,21 @@ function me_small_intt_kernel!(polynomial_in::CuDeviceVector{T}, polynomial_out:
     shared_memory[threadIdx().x + blockDim().x] = polynomial_in[threadIdx().x + blockDim().x]
 
     log2nm1 = N_power - o
-    t = o << t_
-    in_shared_address = ((idx_x >> t_) << t_) + idx_x
+    t = o ← t_
+    in_shared_address = ((idx_x → t_) ← t_) + idx_x
     current_root_index = zero(Int32)
 
     for _ in o:N_power
         CUDA.sync_threads()
 
-        current_root_index = idx_x >> t_
+        current_root_index = idx_x → t_
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(inverse_root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-        t = t << 1
+        t = t ← o
         t_ += o
 
-        in_shared_address = ((idx_x >> t_) << t_) + idx_x
+        in_shared_address = ((idx_x → t_) ← t_) + idx_x
     end
     CUDA.sync_threads()
 
@@ -639,13 +642,13 @@ function me_intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDe
 
     log2nm1 = N_power - o
     t_2 = log2nm1 - logm
-    offset = o << (log2nm1 - k)
+    offset = o ← (log2nm1 - k)
     t_ = shared_index + o - outer_iteration_count
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_x) + (Int32(2) * block_y * offset)
     
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_x) + (block_y * offset)
 
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -653,22 +656,22 @@ function me_intt_kernel1!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDe
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     for _ in o:outer_iteration_count
         CUDA.sync_threads()
         
-        current_root_index = (omega_address >> t_2)
+        current_root_index = (omega_address → t_2)
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(inverse_root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-        t = t << 1
+        t = t ← o
         t_2 += o
         t_ += o
 
-        in_shared_address = ((shared_address >> t_) << t_) + shared_address
+        in_shared_address = ((shared_address → t_) ← t_) + shared_address
     end
     CUDA.sync_threads()
 
@@ -698,13 +701,13 @@ function me_intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDe
 
     log2nm1 = N_power - o
     t_2 = log2nm1 - logm
-    offset = o << (log2nm1 - k)
+    offset = o ← (log2nm1 - k)
     t_ = shared_index + o - outer_iteration_count
 
-    global_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    global_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_y) + (Int32(2) * block_x * offset)
     
-    omega_address = idx_x + (idx_y * (offset ÷ (o << (outer_iteration_count - o)))) + 
+    omega_address = idx_x + (idx_y * (offset → (outer_iteration_count - o))) + 
                      (blockDim().x * block_y) + (block_x * offset)
 
     shared_address = idx_x + (idx_y * blockDim().x)
@@ -712,22 +715,22 @@ function me_intt_kernel2!(polynomial_in::CuDeviceVector{T}, polynomial_out::CuDe
     shared_memory[shared_address + o] = polynomial_in[global_address + o]
     shared_memory[shared_address + (blockDim().x * blockDim().y) + o] = polynomial_in[global_address + offset + o]
 
-    t = o << t_
-    in_shared_address = ((shared_address >> t_) << t_) + shared_address
+    t = o ← t_
+    in_shared_address = ((shared_address → t_) ← t_) + shared_address
     current_root_index = zero(Int32)
 
     for _ in o:outer_iteration_count
         CUDA.sync_threads()
         
-        current_root_index = (omega_address >> t_2)
+        current_root_index = (omega_address → t_2)
 
         GSUnit(pointer(shared_memory, in_shared_address + o), pointer(shared_memory, in_shared_address + t + o), br_power_mod(inverse_root_of_unity, current_root_index, log2nm1, modulus), modulus)
 
-        t = t << 1
+        t = t ← o
         t_2 += o
         t_ += o
 
-        in_shared_address = ((shared_address >> t_) << t_) + shared_address
+        in_shared_address = ((shared_address → t_) ← t_) + shared_address
     end
     CUDA.sync_threads()
     if (last_kernel)

@@ -7,23 +7,24 @@ Struct holding constants needed for barrett reduction.
 """
 struct BarrettReducer{T<:Integer} <: Reducer{T}
     p::T
-    k::Int
+    km2::Int
+    kp3::Int
     μ::T
 
     function BarrettReducer(p::T) where T<:Integer
-        @assert p < typemax(T) >> 2
+        @assert p < typemax(T) >>> 2
         k = Int(ceil(log2(p)))
         μ = T(fld(BigInt(1) << (2*k + 1), p))
-        return new{T}(p, k, μ)
+        return new{T}(p, k-2, k+3, μ)
     end
 end
 
-@inline function add_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:Integer
+@inline function add_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:INTTYPES
     result = x + y
     return (result >= m.p || result < x) ? result - m.p : result
 end
 
-@inline function sub_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:Integer
+@inline function sub_mod(x::T, y::T, m::BarrettReducer{T})::T where T<:INTTYPES
     if y > x
         return (m.p - y) + x
     else
@@ -31,15 +32,13 @@ end
     end
 end
 
-@inline function mul_mod(a::T, b::T, reducer::BarrettReducer{T})::T where T<:Integer
+function mul_mod(a::T, b::T, reducer::BarrettReducer{T})::T where T<:INTTYPES
     C = mywidemul(a, b)
     p = reducer.p
-    μ = reducer.μ
-    k = reducer.k
 
-    r = (C >> (k - 2))
-    r *= μ
-    r >>= (k + 3)
+    r = (C >>> reducer.km2)
+    r *= reducer.μ
+    r >>>= reducer.kp3
     r *= p
     Cout = C - r
     Cout = Cout >= p ? Cout - p : Cout
@@ -57,7 +56,7 @@ function power_mod(n::T, p::Integer, m::BarrettReducer{T}) where T<:Integer
             result = mul_mod(result, base, m)
         end
         base = mul_mod(base, base, m)
-        p = p >> 1
+        p = p >>> 1
     end
 
     return result
@@ -74,7 +73,7 @@ function br_power_mod(n::T, pow::Int32, log2n::Int32, m::BarrettReducer{T}) wher
             result = mul_mod(result, base, m)
         end
         base = mul_mod(base, base, m)
-        mask >>= 1
+        mask >>>= 1
     end
 
     return result
