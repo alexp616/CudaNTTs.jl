@@ -16,13 +16,12 @@ struct NTTPlan{T<:INTTYPES}
     rootOfUnityTable::Union{CuVector{T}, T}
     compiledKernels::Vector{Function}
 
-    function NTTPlan(n::Integer, p::T, npru::T; memoryefficient = false) where T<:Integer
+    function NTTPlan(n::Integer, p::T, npru::T, reducer::Reducer{T}=BarrettReducer(p); memoryefficient = false) where T<:Integer
         @assert ispow2(n)
         @assert p % n == 1
         n = Int32(n)
         log2n = intlog2(n)
-
-        reducer = BarrettReducer(p)
+        
         if memoryefficient
             rootOfUnityTable = npru
         else
@@ -152,7 +151,7 @@ struct INTTPlan{T<:INTTYPES}
     rootOfUnityTable::Union{CuVector{T}, T}
     compiledKernels::Vector{Function}
 
-    function INTTPlan(n::Integer, p::T, npru::T; memoryefficient = false) where T<:INTTYPES
+    function INTTPlan(n::Integer, p::T, npru::T, reducer::Reducer{T}=BarrettReducer(p); memoryefficient = false) where T<:INTTYPES
         @assert ispow2(n)
         @assert p % n == 1
         n = Int32(n)
@@ -163,7 +162,6 @@ struct INTTPlan{T<:INTTYPES}
         n_inverse = T(invmod(BigInt(n), BigInt(p)))
         @assert BigInt(n) * BigInt(n_inverse) % p == 1
 
-        reducer = BarrettReducer(p)
         if memoryefficient
             rootOfUnityTable = npruinv
         else
@@ -368,14 +366,18 @@ Returns a NTTPlan, as well as the inverse INTTPlan to be used in
 - `npru`: len-th primitive root of unity of `p`. No validation is done, see `primitive_nth_root_of_unity()` to generate.
 - `memoryefficient`: Boolean to determine whether or not to generate root of unity table. If false, NTT will be slower but use half the memory.
 """
-function plan_ntt(len::Integer, p::INTTYPES, npru::INTTYPES; memoryefficient = false)::Tuple{NTTPlan, INTTPlan}
+function plan_ntt(len::Integer, p::INTTYPES, npru::INTTYPES; reducer::Union{Nothing, Reducer}=nothing, memoryefficient = false)::Tuple{NTTPlan, INTTPlan}
     @assert ispow2(len) "len must be a power of 2."
     @assert isprime(p) "p must be prime."
-    @assert p < typemax(typeof(p)) >> 2 "p must be smaller than typemax(p) for Barrett reduction"
+    if isnothing(reducer)
+        @assert p < typemax(typeof(p)) >> 2 "p must be smaller than typemax(p) >> 2 for Barrett reduction"
+    end
+    
     npru = typeof(p)(npru)
     # @assert is_primitive_root(npru, p, n) this computation takes too long
 
-    return NTTPlan(len, p, npru; memoryefficient = memoryefficient), INTTPlan(len, p, npru; memoryefficient = memoryefficient)
+    t_reducer = isnothing(reducer) ? BarrettReducer(p) : reducer
+    return NTTPlan(len, p, npru, t_reducer; memoryefficient = memoryefficient), INTTPlan(len, p, npru, t_reducer; memoryefficient = memoryefficient)
 end
 
 """

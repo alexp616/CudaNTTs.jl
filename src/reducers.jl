@@ -45,7 +45,7 @@ function mul_mod(a::T, b::T, reducer::BarrettReducer{T})::T where T<:INTTYPES
     return unsafe_trunc(T, Cout)
 end
 
-function power_mod(n::T, p::Integer, m::BarrettReducer{T}) where T<:Integer
+function power_mod(n::T, p::Integer, m::Reducer{T}) where T<:Integer
     result = one(T)
     base = n
 
@@ -62,7 +62,7 @@ function power_mod(n::T, p::Integer, m::BarrettReducer{T}) where T<:Integer
     return result
 end
 
-function br_power_mod(n::T, pow::Int32, log2n::Int32, m::BarrettReducer{T}) where T<:Integer
+function br_power_mod(n::T, pow::Int32, log2n::Int32, m::Reducer{T}) where T<:Integer
     result = one(T)
     base = n
 
