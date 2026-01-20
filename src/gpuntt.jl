@@ -364,7 +364,7 @@ Returns a NTTPlan, as well as the inverse INTTPlan to be used in
 - `len`: Length of NTT (must be power of 2)
 - `p`: Characteristic of field to perform NTT in.
 - `npru`: len-th primitive root of unity of `p`. No validation is done, see `primitive_nth_root_of_unity()` to generate.
-- `memoryefficient`: Boolean to determine whether or not to generate root of unity table. If false, NTT will be slower but use half the memory.
+- `memoryefficient`: Boolean to determine whether or not to generate root of unity table. If true, NTT will be slower but use half the memory.
 """
 function plan_ntt(len::Integer, p::INTTYPES, npru::INTTYPES; reducer::Union{Nothing, Reducer}=nothing, memoryefficient = false)::Tuple{NTTPlan, INTTPlan}
     @assert ispow2(len) "len must be a power of 2."
